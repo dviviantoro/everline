@@ -1,0 +1,32 @@
+# TECHNICAL_DEBT
+
+> Living documentation — see `ai-rules/dev-docs-ai-templates/TECHNICAL_DEBT-template.md` for the template this was generated from. This is an inventory to stay aware of, not a to-do list to clear unprompted.
+
+---
+
+## Priority Debt List
+
+| Priority | Repo | Debt | Evidence | Suggested Direction |
+|----------|------|------|----------|---------------------|
+| P2 | apps | API route handlers call Supabase directly — no Controller → Service → Repository split | `app/api/**/route.ts` | Acceptable at POC scale per `planning/architecture.md` §2 ("kept deliberately simple"). If this grows past POC, extract a service layer per `ai-rules/coding-standards/04-separation-of-concerns.md`. |
+| P2 | apps | Survey + reading insert is two sequential, non-transactional writes | `app/api/assets/[id]/transformer-surveys/route.ts`, `.../pd-surveys/route.ts` | A reading/points insert failure leaves an orphaned `surveys` row with no reading. Acceptable — a survey without a reading is still a valid partial record per `planning/PROJECT_BRIEF.md` §7 — but a Postgres RPC could make this atomic if it ever becomes a problem in practice. |
+| P3 | apps | No automated test suite | No test runner in `package.json`; verification this session was manual + ad hoc Playwright scripts (not committed) | Add Vitest coverage for `lib/` (especially `worstSeverity`, the severity/condition rollup) and Playwright coverage for the 5 core UI flows before this leaves POC stage. |
+| P3 | apps | `AddAssetForm` doesn't require ≥1 route point for a line | `components/forms/AddAssetForm.tsx`, `lib/validation.ts` | Mirrors the ≥1-point requirement already enforced (both client and server) for PD surveys, but not for asset registration. Low risk — Add Asset is P1 and effectively admin-only in this POC. |
+| P3 | apps | `leaflet` is patched via `patch-package` (`patches/leaflet+1.9.4.patch`) | Upstream fix (Leaflet/Leaflet#8749/#9527) exists in source but was never released to npm — 1.9.4 is still `latest` as of 2026-09-05 | Check `npm view leaflet dist-tags` periodically; drop the patch and this entry once a release newer than 1.9.4 ships with the fix. |
+
+---
+
+## Risky Areas to Modify
+
+| Area | Repo | Risk | Reason |
+|------|------|------|--------|
+| `lib/data/assets.ts`, `app/api/assets/[id]/route.ts` | apps | MEDIUM | Both rely on the `transformer_readings`-is-a-single-object PostgREST quirk (documented in-code). A query rewrite that re-embeds `transformer_readings` without accounting for that shape will silently reintroduce the "every transformer shows no data yet" bug this session found and fixed. |
+| `app/api/assets/[id]/transformer-surveys/route.ts`, `.../pd-surveys/route.ts` | apps | MEDIUM | These are the only write paths against insert-only tables. Any change here must preserve the no-UPDATE/no-DELETE guarantee (`planning/architecture.md` §8) — this is the project's one non-negotiable rule. |
+| `components/map/MapView.tsx` | apps | LOW | Render order matters — `Polyline`s must stay before `AssetMarker`s in JSX, or overlapping lines will intercept clicks meant for nearby transformer markers again. |
+| `package.json` (`leaflet` version) | apps | LOW | If `leaflet` is ever bumped, `patch-package` will fail loudly at `npm install` if the patch no longer applies cleanly (a safe failure, not a silent one) — check whether the new version still needs the patch before just re-generating it. |
+
+---
+
+## Debt Acceptance Notes
+
+- Assumption based on repository analysis: given `planning/PROJECT_BRIEF.md` §8 ("keep it boring") and the explicit POC scope, all debt listed above is accepted as-is for now. Revisit before any phase that introduces real (non-dummy) PLN data.

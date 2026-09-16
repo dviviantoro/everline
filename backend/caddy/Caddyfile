@@ -1,0 +1,13 @@
+{$API_DOMAIN} {
+	# PD photo evidence, publicly readable (bucket policy set by the api
+	# container on startup) — strip /storage so MinIO sees the raw
+	# <bucket>/<key> path underneath.
+	handle /storage/* {
+		uri strip_prefix /storage
+		reverse_proxy minio:9000
+	}
+
+	handle {
+		reverse_proxy api:3001
+	}
+}

@@ -1,0 +1,29 @@
+# Alternative Caddyfile for when the VPS has no domain yet — just a raw
+# public IP. Real Let's Encrypt certificates need a publicly-resolvable
+# hostname, which a bare IP isn't, so this forces Caddy's own internal CA
+# (a self-signed certificate) instead of attempting ACME issuance.
+#
+# Use this ONLY if you're not using the sslip.io trick documented in
+# backend/README.md ("Don't have a domain yet?") — that approach gets you a
+# real trusted certificate with zero extra config, using the default
+# Caddyfile unchanged. This self-signed fallback works everywhere but means
+# every visiting browser must manually trust the certificate once (click
+# through the "connection is not private" warning after visiting
+# https://<VPS_IP> directly) before fetch() calls from the Vercel frontend
+# to this API will succeed — not viable for real end users, fine for
+# solo testing/development.
+#
+# To use: set CADDYFILE_PATH=./caddy/Caddyfile.no-domain in .env, then
+# `docker compose up -d --build`.
+:443 {
+	tls internal
+
+	handle /storage/* {
+		uri strip_prefix /storage
+		reverse_proxy minio:9000
+	}
+
+	handle {
+		reverse_proxy api:3001
+	}
+}

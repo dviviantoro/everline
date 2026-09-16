@@ -1,0 +1,104 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* Manual (not OS-preference-driven) dark mode for the dashboard — toggled by
+   adding/removing `.dark` on the dashboard root via useTheme(). Landing/login
+   keep their fixed dark look outside this and never get the class. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --color-ink: #0a0d10;
+  --color-panel: #12161b;
+  --color-panel-raised: #171c22;
+  --color-line: #232a32;
+  --color-fog: #7c8a97;
+  --color-paper: #e8ecf1;
+
+  --color-amber: #f5a623;
+  --color-amber-soft: #f5a62333;
+  --color-cyan: #22d3ee;
+  --color-cyan-soft: #22d3ee33;
+
+  --color-good: #22c55e;
+  --color-warning: #f5a623;
+  --color-critical: #ef4444;
+
+  --chart-grid: #e2e8f0;
+  --chart-axis: #64748b;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-text: #0f172a;
+  --chart-tooltip-border: #e2e8f0;
+}
+
+.dark {
+  --chart-grid: #334155;
+  --chart-axis: #94a3b8;
+  --chart-tooltip-bg: #1e293b;
+  --chart-tooltip-text: #f1f5f9;
+  --chart-tooltip-border: #334155;
+}
+
+@theme inline {
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  --color-ink: var(--color-ink);
+  --color-panel: var(--color-panel);
+  --color-panel-raised: var(--color-panel-raised);
+  --color-line: var(--color-line);
+  --color-fog: var(--color-fog);
+  --color-paper: var(--color-paper);
+  --color-amber: var(--color-amber);
+  --color-amber-soft: var(--color-amber-soft);
+  --color-cyan: var(--color-cyan);
+  --color-cyan-soft: var(--color-cyan-soft);
+  --color-good: var(--color-good);
+  --color-warning: var(--color-warning);
+  --color-critical: var(--color-critical);
+}
+
+/* Leaflet's popup chrome is plain white by default and isn't reachable by
+   Tailwind's dark: variant (it's Leaflet's own stylesheet, not ours) — themed
+   directly so a marker popup doesn't look out of place on the dark map. */
+.dark .leaflet-popup-content-wrapper,
+.dark .leaflet-popup-tip {
+  background: #1e293b;
+  color: #f1f5f9;
+}
+.dark .leaflet-container a.leaflet-popup-close-button {
+  color: #94a3b8;
+}
+
+/* Blueprint grid backdrop — used behind the landing + login pages. */
+.grid-backdrop {
+  background-image:
+    linear-gradient(to right, var(--color-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: center;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+.pulse-dot { animation: pulse-dot 2.4s ease-in-out infinite; }
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise-in { animation: rise-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@keyframes current-flow {
+  to { stroke-dashoffset: -200; }
+}
+.current-flow { stroke-dasharray: 6 10; animation: current-flow 6s linear infinite; }
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}

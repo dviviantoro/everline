@@ -1,0 +1,97 @@
+# CHANGELOG
+
+> Living documentation — see `ai-rules/CHANGELOG-template.md` for the template this was generated from. Source input for `dev-docs/ai/VERSION.md`'s release recommendations.
+
+---
+
+## [Unreleased] — Current Sprint/Milestone
+
+### Changed — architecture split: self-hosted backend on a VPS, Vercel stays frontend-only
+- **This supersedes `planning/architecture.md`'s "Monolith on Vercel + Supabase" description** (that file is marked immutable and was intentionally left as-is — it documents the original decision, not necessarily the current one). The user acquired a VPS and asked to move the database, API, and backend logic there, keeping only the Next.js frontend on Vercel; the tradeoff (this breaks `CLAUDE.md`'s "don't split it" non-negotiable) was flagged and the user confirmed they wanted the split anyway.
+- New `backend/` — its own git repo (per `ai-rules/AGENTS.md`'s recognized "Fullstack" project type, `backend/`+`frontend/`), Express + TypeScript + raw `pg` (no ORM), a near-1:1 mechanical port of every former Next.js API route (same paths, same request/response shapes). Dockerized: `postgres:16-alpine` (schema auto-applied from `db/init.sql` on first boot — no more manual "paste into Supabase SQL Editor"), `quay.io/minio/minio` (S3-compatible object storage, replacing Supabase Storage for PD photo evidence — credentials never reach the browser now, the frontend uploads to the backend's `POST /api/uploads` instead of talking to storage directly), and `caddy:2-alpine` (reverse proxy + automatic HTTPS, required since Vercel serves the frontend over HTTPS and browsers block a plain-HTTP API as mixed content). See `backend/README.md` for the full VPS install walkthrough.
+- Every backend route requires a shared `X-API-Key` header — not real auth (this POC has never had any), just a minimal safeguard now that the API is directly internet-exposed instead of sitting behind Supabase's infrastructure.
+- Interactive API docs added: `swagger-jsdoc` + `swagger-ui-express`, served at `/docs` (UI) and `/docs.json` (raw OpenAPI spec) on the backend.
+- `apps/` (frontend): removed `app/api/**` (all 14 route handlers), `lib/data/*.ts`, `lib/supabase.ts`, `lib/validation.ts`, `lib/supabaseStorage.ts`, and the `@supabase/supabase-js`/`zod` dependencies — this app now has zero server-side database access. New `lib/api.ts` (`apiFetch()`, attaches the API key, points at `NEXT_PUBLIC_API_BASE_URL`) is the one place every request goes through, client- and server-component-side alike. New `lib/uploadPhoto.ts` replaces the old direct-to-Supabase-Storage upload.
+- Verified locally end-to-end before handoff: built the Docker image, brought up the full Compose stack (self-signed `localhost` cert via Caddy), ran the seed script inside the container, and smoke-tested health/auth/CRUD/CSV-import/photo-upload/public-photo-read through curl — then pointed a local frontend build at that same stack.
+
+### Added (pole-first network model, CSV import/export, photo evidence, nav, theme)
+- **Architecture change**: poles are now standalone network nodes (no `asset_id`/`sequence_no` — dropped in migration `004`), and a "power line" asset is exactly one span between 2 poles, never a multi-point route. Every existing multi-pole line was split into one segment per adjacent pole pair (e.g. a 3-pole line becomes 2 segments), each auto-named after its 2 endpoint poles (`assets.pole_a_id`/`pole_b_id`, both new columns)
+- 3 PD measurement points are now sited between every such pole pair (previously 3 for a whole multi-pole line)
+- CSV bulk import for all 3 asset types — poles (label/lat/lng), transformers (code/name/capacity/lat/lng/nameplate), and lines (resolves `pole_a_label`/`pole_b_label` against existing poles) — via a new generic `CsvImportForm` (`papaparse`) and `POST /api/import/{poles,transformers,lines}`; `AddAssetForm` gained a Manual/Import CSV toggle and a "Pole" type (poles are now directly addable, not just implied by line creation)
+- PD measurements gained a device field (`pd_readings.pd_device`) and real photo evidence upload to a Supabase Storage bucket (`pd-photos`, public, created by hand — see migration `004`), via new `lib/supabaseStorage.ts`; shown inline (thumbnail + link to full size) in the Point Measurements view and the measurement point's map-click detail panel
+- CSV export ("Export CSV" button) for transformer telemetry and PD measurement point reading history, via new client-side-only `lib/csv.ts` — no server round trip needed
+- Sidebar nav gained Asset Registry (`/registry`, live table of all assets/poles), Reports (`/reports`, hub linking to the CSV exports), Settings (`/settings`), Profile (`/profile`), and Logout — new `StubPageShell` component shared by the 4 new pages
+- Dashboard-wide light/dark theme toggle (`lib/useTheme.ts`, Tailwind v4 class-based `dark:` variant via `@custom-variant dark`), persisted per-viewer like the sidebar's collapse state; landing/login keep their fixed dark look by design. Recharts grid/axis/tooltip colors and Leaflet's popup chrome are also themed via CSS variables/overrides since neither is reachable by Tailwind's `dark:` classes
+- `lucide-react` icons replace the sidebar's ad-hoc shape glyphs for nav/account items (layer-toggle shapes stay custom since they must visually match the map's own marker shapes)
+- `planning/migrations/004_pole_network_model.sql`
+
+### Added
+- Next.js App Router monolith scaffolded in `apps/` (TypeScript, Tailwind CSS v4, `react-leaflet`, `@supabase/supabase-js`, `zod`)
+- Dummy seed data: 8 transformers + 5 lines clustered in Pekalongan, Central Java, each with 2–3 historical surveys showing plausible trends (`scripts/seed.ts`, idempotent — safe to re-run via `npm run seed`)
+- Landing page (`/`) with live asset stats pulled from Supabase, and a UI-only sign-in screen (`/login`) — no auth backend exists in this POC, so it's a gate only, not a real credential check
+- `apps/patches/leaflet+1.9.4.patch` (via `patch-package`, wired to `postinstall`) fixing an upstream Leaflet bug
+- Map view with severity-colored transformer markers and line polylines, plus a transformer/line layer toggle
+- Asset detail panel with an expandable chronological survey history timeline
+- Transformer survey form (insert-only write path)
+- Line PD survey form with repeatable per-point rows (insert-only write path, whole patrol submitted as one survey)
+- Add-asset form for registering a new transformer or line (renders immediately with a "no data yet" marker)
+- API routes: `GET/POST /api/assets`, `GET/PUT /api/assets/{id}`, `POST /api/assets/{id}/transformer-surveys`, `POST /api/assets/{id}/pd-surveys`
+- `planning/modules.md` and `planning/timeline.md`
+- Full `dev-docs/ai/*` documentation set and this `CHANGELOG.md`
+- Transformer nameplate fields (manufacturer, serial number, year, phase configuration, rated voltage/frequency, impedance %, cooling type) and a `transformer_telemetry` table for simulated IoT electrical readings (kWh, kVArh, kW, kVAr, kVA, PF, frequency, voltage, current, demand, THD) at ~5-minute intervals, with a metric-selectable time-series chart (`recharts`) in the transformer detail panel
+- `poles` table giving each physical pole/tiang a stable identity along a line (previously only an ad-hoc label/lat-lng per survey); pole markers on the map (gray diamond, distinct from transformer circles) — a pole carries no reading itself, see `measurement_points` below
+- `measurement_points` table — PD survey locations sited *between* poles (not at them), evenly spaced along a line's route (`interpolateAlongRoute()` in `lib/geo.ts`, 3 points per line); rendered as colored squares on the map (severity-colored, a 4th symbol distinct from transformers/poles/lines), each with its own reading history. `pd_readings` links to this via `measurement_point_id` (previously, incorrectly, linked to `poles` — see Fixed)
+- `planning/migrations/002_nameplate_poles_telemetry.sql` and `003_measurement_points.sql` — one-time migrations for the above, applied by hand via Supabase SQL Editor (no migration runner in this POC)
+- Collapsible left sidebar on the dashboard (`DashboardSidebar`) with navigation, layer toggles (Transformers/Lines/Poles/Measurements), a symbol/severity legend, and the Add Asset trigger — replaces the header's layer toggle
+- App icon (`apps/app/icon.png`, from `wire.png`) replacing the default Next.js favicon
+- `CollapsibleSection` component — Nameplate/Live Telemetry/Survey History on a transformer's detail panel, and Point Measurements/Survey History on a line's, are now independently collapsible
+- `GET /api/assets/{id}/points` + `getMeasurementPointDetailsForAsset()` — every measurement point along a line with its own full PD reading history, powering a per-point "last measurement + history graph" view (`LinePointsPanel`) on the line detail panel
+- Latitude/longitude now shown alongside every measurement: the transformer's position in its Live Telemetry section, each PD point's position in both the Point Measurements view and Survey History entries
+
+### Changed
+- App logo: the header/sidebar brand mark is now the `wire.png` artwork recolored amber (`#f5a623`, matching the landing page) via a CSS mask (`BrandMark` component) instead of a plain "E" letter badge — the raw glyph is solid black and was nearly invisible on the dark login panel
+- Pole detail panel simplified to identity/location info only (label, line, sequence no., lat/lng, registered date) — no severity, no charts. PD magnitude/temperature history now lives on `measurement_points` instead, surfaced via the line's Point Measurements view and a measurement point's own map-click detail panel
+- `app/dashboard/page.tsx` (formerly `app/page.tsx`) forced to dynamic rendering (`export const dynamic = "force-dynamic"`) so the map always reflects live Supabase state instead of a build-time snapshot
+- The map app moved from `/` to `/dashboard` to make room for the new landing page; whole app given a dark industrial theme (Big Shoulders Display + IBM Plex Sans/Mono, amber/cyan accents), first branded "GARDU" and then renamed to **"EverLine"**
+- Seed data area moved from Semarang to Pekalongan; asset codes changed from `-SMG-` to `-PKL-`
+- `LinePdSurveyForm`/`PointRowInput` now let a surveyor pick a registered measurement point per row instead of free-typing a label and coordinates (falls back to a "custom point" entry when none is on file)
+- `AddAssetForm`: line creation now labels each route point (feeds `poles`) and auto-sites 3 `measurement_points` along the route; transformer creation has an optional nameplate-details disclosure
+
+### Fixed
+- `transformer_readings` PostgREST embed was read as an array but is actually returned as a single object (it has a `UNIQUE` FK to `surveys`, unlike `pd_readings` which is genuinely one-to-many) — every transformer showed "no data yet" until fixed in `lib/data/assets.ts` and `app/api/assets/[id]/route.ts`
+- Map click hit-testing: a `Polyline` rendered after a transformer marker could intercept clicks meant for that marker when the two visually overlapped; lines now render before markers in `MapView.tsx`
+- Dev server was unreachable when opened via a forwarded/LAN URL instead of `localhost` — Next.js blocks cross-origin requests to dev-only JS resources by default, so every client component (including the map) silently failed to mount; fixed with `allowedDevOrigins` in `next.config.ts`. That fix later went stale on its own (hardcoded LAN IP from a since-changed network re-triggered the exact same "stuck forever on 'Loading map…', zero console errors" symptom) — `allowedDevOrigins` now computes the machine's current LAN IPs at server startup via `os.networkInterfaces()` instead of hardcoding one
+- PD readings were modeled as linking to `poles` — wrong: a pole is a support structure with no reading, the actual measurement location sits *between* poles. Split into a separate `measurement_points` entity (`pd_readings.pole_id` → `measurement_point_id`, migration `003_measurement_points.sql`)
+- "Add Asset" button appeared completely unresponsive (no visible modal, no console error) — the modal overlay (`MapApp.tsx`) had no explicit `z-index`, and Leaflet's own controls (`.leaflet-top`/`.leaflet-bottom`, z-index 1000) escape into the shared stacking context because the map container establishes none of its own, silently painting over the modal even though it was correctly mounted and interactive in the DOM. Fixed with `z-[1100]` on the overlay
+- Upstream Leaflet 1.9.4 bug (`Cannot read properties of undefined (reading '_leaflet_pos')`, missing a null-check in `getPosition()` that was fixed upstream but never released to npm) — patched via `patch-package`
+- Stray `body { font-family: Arial }` rule left over from the `create-next-app` scaffold was silently overriding the intended font the whole time (unlayered CSS beats Tailwind's layered utilities) — removed
+- A negative `z-index` on a decorative hero SVG escaped its intended stacking context and painted entirely behind the page's opaque background, making it invisible — fixed with `isolate` on the containing section
+
+---
+
+## Template Entry (Copy for New Release)
+
+```markdown
+## [{versi}] — {YYYY-MM-DD}
+
+### Added
+- 
+
+### Changed
+- 
+
+### Fixed
+- 
+
+### Removed
+- 
+
+### Security
+- 
+```
+
+---
+
+## Archived Changelogs
+
+None yet.

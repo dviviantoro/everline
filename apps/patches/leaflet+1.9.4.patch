@@ -1,0 +1,13 @@
+diff --git a/node_modules/leaflet/dist/leaflet-src.js b/node_modules/leaflet/dist/leaflet-src.js
+index 90f6db3..979d0bd 100644
+--- a/node_modules/leaflet/dist/leaflet-src.js
++++ b/node_modules/leaflet/dist/leaflet-src.js
+@@ -2560,7 +2560,7 @@
+   	// this method is only used for elements previously positioned using setPosition,
+   	// so it's safe to cache the position for performance
+ 
+-  	return el._leaflet_pos || new Point(0, 0);
++  	return (el && el._leaflet_pos) || new Point(0, 0);
+   }
+ 
+   // @function disableTextSelection()
