@@ -118,6 +118,30 @@ docker compose up -d --build
 
 Postgres/MinIO data persists in named Docker volumes (`postgres_data`, `minio_data`) — rebuilding the `api`/`caddy` images doesn't touch them.
 
+## Changing configuration
+
+Edited `.env` but not the code? No rebuild needed — Compose recreates any container whose resolved config changed:
+
+```bash
+docker compose up -d
+docker compose logs -f api --tail=50   # confirm it came back up clean
+```
+
+`CORS_ORIGIN`, `API_KEY`, `S3_PUBLIC_BASE_URL` and `API_DOMAIN` all take effect this way.
+
+**`POSTGRES_PASSWORD` is the exception.** It's only applied when the `postgres_data` volume is first created, so editing it on an existing install changes `DATABASE_URL` without changing the actual database password — and the api then can't connect. Rotate it inside Postgres instead, then update both values in `.env` to match:
+
+```bash
+docker compose exec postgres psql -U everline -d everline \
+  -c "ALTER USER everline WITH PASSWORD 'the-new-password';"
+# then set POSTGRES_PASSWORD, and the password inside DATABASE_URL, to that value
+docker compose up -d
+```
+
+MinIO has no such catch — it re-reads `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` on every start. Keep `S3_ACCESS_KEY`/`S3_SECRET_KEY` equal to them, since that's the account the api authenticates with.
+
+Rotating `API_KEY` also means updating `NEXT_PUBLIC_API_KEY` in Vercel and redeploying the frontend — the backend accepts exactly one key, so expect 401s in the gap. **Never reuse the `API_KEY` value for MinIO or Postgres:** it ships to the browser inside the frontend bundle and is public by design.
+
 ## Backups
 
 The only state that matters is the `postgres_data` and `minio_data` volumes.
