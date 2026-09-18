@@ -10,7 +10,6 @@ import { TelemetryPanel } from "./TelemetryPanel";
 import { LinePointsPanel } from "./LinePointsPanel";
 import { CollapsibleSection } from "./CollapsibleSection";
 import { TransformerSurveyForm } from "@/components/forms/TransformerSurveyForm";
-import { LinePdSurveyForm } from "@/components/forms/LinePdSurveyForm";
 import { apiFetch } from "@/lib/api";
 
 export function AssetDetailPanel({
@@ -92,39 +91,33 @@ export function AssetDetailPanel({
             </>
           )}
 
-          <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-            <button
-              onClick={() => setFormOpen((v) => !v)}
-              className="w-full rounded bg-slate-800 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
-            >
-              {formOpen ? "Cancel" : "Add Survey"}
-            </button>
-          </div>
+          {/* Lines have no manual entry path: PD readings are captured by the
+              survey device and arrive through the API, not typed in here. */}
+          {detail.type === "transformer" && (
+            <>
+              <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+                <button
+                  onClick={() => setFormOpen((v) => !v)}
+                  className="w-full rounded bg-slate-800 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
+                >
+                  {formOpen ? "Cancel" : "Add Survey"}
+                </button>
+              </div>
 
-          {formOpen && (
-            <div className="mt-3 rounded border border-slate-200 p-3 dark:border-slate-800">
-              {detail.type === "transformer" ? (
-                <TransformerSurveyForm
-                  assetId={detail.id}
-                  onCancel={() => setFormOpen(false)}
-                  onSuccess={() => {
-                    setFormOpen(false);
-                    reload();
-                    onSurveyAdded();
-                  }}
-                />
-              ) : (
-                <LinePdSurveyForm
-                  assetId={detail.id}
-                  onCancel={() => setFormOpen(false)}
-                  onSuccess={() => {
-                    setFormOpen(false);
-                    reload();
-                    onSurveyAdded();
-                  }}
-                />
+              {formOpen && (
+                <div className="mt-3 rounded border border-slate-200 p-3 dark:border-slate-800">
+                  <TransformerSurveyForm
+                    assetId={detail.id}
+                    onCancel={() => setFormOpen(false)}
+                    onSuccess={() => {
+                      setFormOpen(false);
+                      reload();
+                      onSurveyAdded();
+                    }}
+                  />
+                </div>
               )}
-            </div>
+            </>
           )}
 
           {detail.type === "line" && (
@@ -133,13 +126,15 @@ export function AssetDetailPanel({
             </CollapsibleSection>
           )}
 
-          <CollapsibleSection title="Survey History">
-            <SurveyHistoryTimeline
-              surveys={detail.surveys}
-              type={detail.type}
-              assetPosition={{ latitude: detail.latitude, longitude: detail.longitude }}
-            />
-          </CollapsibleSection>
+          {detail.type === "transformer" && (
+            <CollapsibleSection title="Survey History">
+              <SurveyHistoryTimeline
+                surveys={detail.surveys}
+                type={detail.type}
+                assetPosition={{ latitude: detail.latitude, longitude: detail.longitude }}
+              />
+            </CollapsibleSection>
+          )}
         </>
       )}
     </aside>

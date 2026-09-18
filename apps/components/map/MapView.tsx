@@ -6,8 +6,15 @@ import { AssetMarker } from "./AssetMarker";
 import { PoleMarker } from "./PoleMarker";
 import { MeasurementPointMarker } from "./MeasurementPointMarker";
 import { PDPointMarker } from "./PDPointMarker";
-import { SEVERITY_DOT } from "@/components/detail/SeverityBadge";
-import { routeToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM } from "@/lib/geo";
+import { routeToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, CENTRAL_JAVA_BOUNDS, MIN_ZOOM } from "@/lib/geo";
+
+// Cable construction, not severity — SUTM is an overhead line (saluran udara),
+// SKTM is buried cable (saluran kabel). Severity still reads off the PD
+// measurement markers sitting along each route.
+const LINE_COLOR: Record<string, string> = {
+  SUTM: "#2563eb", // overhead — blue
+  SKTM: "#64748b", // underground — grey
+};
 
 export function MapView({
   assets,
@@ -41,7 +48,14 @@ export function MapView({
   onSelectMeasurementPoint: (id: string) => void;
 }) {
   return (
-    <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full">
+    <MapContainer
+      center={DEFAULT_CENTER}
+      zoom={DEFAULT_ZOOM}
+      minZoom={MIN_ZOOM}
+      maxBounds={CENTRAL_JAVA_BOUNDS}
+      maxBoundsViscosity={1}
+      className="h-full w-full"
+    >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -60,7 +74,7 @@ export function MapView({
               key={asset.id}
               positions={routeToLatLngs(asset.route_geometry)}
               pathOptions={{
-                color: SEVERITY_DOT[asset.latest_severity ?? "none"],
+                color: LINE_COLOR[asset.line_type ?? ""] ?? "#64748b",
                 weight: asset.id === selectedAssetId ? 5 : 3,
               }}
               eventHandlers={{ click: () => onSelectAsset(asset.id) }}

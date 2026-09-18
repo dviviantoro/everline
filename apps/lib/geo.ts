@@ -13,6 +13,15 @@ export function routeToLatLngs(route: [number, number][] | null | undefined): [n
 export const DEFAULT_CENTER: [number, number] = [-6.8886, 109.6753];
 export const DEFAULT_ZOOM = 13;
 
+// Panning/zooming is clamped to Central Java (plus the Yogyakarta enclave it
+// surrounds) — this network only exists here, so letting the view wander to
+// the rest of the world just loses the user.
+export const CENTRAL_JAVA_BOUNDS: [[number, number], [number, number]] = [
+  [-8.4, 108.4], // south-west
+  [-5.6, 111.9], // north-east
+];
+export const MIN_ZOOM = 8;
+
 // interpolateAlongRoute()/DEFAULT_MEASUREMENT_FRACTIONS (siting PD measurement
 // points between poles at line-creation time) moved to backend/src/geo.ts —
 // that only ever happened server-side (API routes, the seed script), and

@@ -1,23 +1,16 @@
 "use client";
 
 import L from "leaflet";
-import { Marker, Popup } from "react-leaflet";
+import { Marker, Popup, Tooltip } from "react-leaflet";
 import type { MeasurementPointListItem } from "@/lib/types";
 import { SeverityBadge, SEVERITY_DOT } from "@/components/detail/SeverityBadge";
+import { radioSvg } from "./radioIcon";
 
-// Square, not diamond — visually distinct from pole markers, since a
-// measurement point is a different kind of thing (a PD reading location,
-// not a support structure).
-function squareIcon(color: string, selected: boolean) {
-  const size = selected ? 12 : 9;
+function radioIcon(color: string, selected: boolean) {
+  const size = selected ? 22 : 17;
   return L.divIcon({
     className: "",
-    html: `<div style="
-      width:${size}px;height:${size}px;
-      background:${color};
-      border:1.5px solid #1e293b;
-      box-shadow:0 0 0 1px rgba(255,255,255,0.6);
-    "></div>`,
+    html: radioSvg(color, size),
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
@@ -37,9 +30,30 @@ export function MeasurementPointMarker({
   return (
     <Marker
       position={[point.latitude, point.longitude]}
-      icon={squareIcon(color, selected)}
+      icon={radioIcon(color, selected)}
       eventHandlers={{ click: () => onSelect(point.id) }}
     >
+      <Tooltip direction="top" offset={[0, -10]} opacity={1}>
+        <div className="space-y-0.5">
+          <p className="font-semibold">{point.label ?? `Point ${point.sequence_no ?? ""}`}</p>
+          <p className="text-slate-500">PD measurement point</p>
+          <p>Severity: {point.latest_severity ?? "no reading yet"}</p>
+          {point.latest_pd_magnitude != null && (
+            <p>
+              PD magnitude: {point.latest_pd_magnitude} {point.latest_pd_unit ?? ""}
+            </p>
+          )}
+          {point.latest_temperature_c != null && <p>Temperature: {point.latest_temperature_c} °C</p>}
+          {point.latest_pd_device && <p>Device: {point.latest_pd_device}</p>}
+          {point.latest_surveyed_at && (
+            <p>Measured: {new Date(point.latest_surveyed_at).toLocaleDateString("en-GB")}</p>
+          )}
+          <p>
+            {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
+          </p>
+        </div>
+      </Tooltip>
+
       <Popup>
         <div className="space-y-1">
           <p className="font-semibold">{point.label ?? "PD Measurement"}</p>
