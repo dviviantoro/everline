@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import type { MeasurementPointWithReadings } from "@/lib/types";
 import { SeverityBadge } from "./SeverityBadge";
 import { TimeSeriesChart } from "./TimeSeriesChart";
+import { PdTrendFooter } from "./PdTrendFooter";
 import { CollapsibleSection } from "./CollapsibleSection";
+import { PD_CHART_ZONES } from "@/lib/severity";
 import { toCsv, downloadCsv } from "@/lib/csv";
 import { apiFetch } from "@/lib/api";
 
@@ -76,12 +78,14 @@ function PointRow({ point, index }: { point: MeasurementPointWithReadings; index
             <dd>
               {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
             </dd>
-            <dt className="text-slate-500 dark:text-slate-400">Last PD magnitude</dt>
+            <dt className="text-slate-500 dark:text-slate-400">Last value of PD magnitude</dt>
             <dd>{latest ? `${latest.pd_magnitude ?? "—"} ${latest.pd_unit ?? ""}` : "—"}</dd>
-            <dt className="text-slate-500 dark:text-slate-400">Last temperature</dt>
+            <dt className="text-slate-500 dark:text-slate-400">Last value of temperature</dt>
             <dd>{latest?.temperature_c ?? "—"} °C</dd>
-            <dt className="text-slate-500 dark:text-slate-400">PD device</dt>
+            <dt className="text-slate-500 dark:text-slate-400">Last device</dt>
             <dd>{latest?.pd_device ?? "—"}</dd>
+            <dt className="text-slate-500 dark:text-slate-400">Last surveyed operator</dt>
+            <dd>{latest?.surveyor ?? "—"}</dd>
             <dt className="text-slate-500 dark:text-slate-400">Last measured</dt>
             <dd>{latest ? new Date(latest.surveyed_at).toLocaleDateString("en-GB") : "—"}</dd>
           </dl>
@@ -108,8 +112,10 @@ function PointRow({ point, index }: { point: MeasurementPointWithReadings; index
                   data={chartData}
                   xKey="surveyed_at"
                   series={[{ key: "pd_magnitude", label: "PD magnitude", color: "#dc2626", unit: latest?.pd_unit ?? undefined }]}
+                  zones={PD_CHART_ZONES}
                   height={140}
                 />
+                <PdTrendFooter readings={point.readings} unit={latest?.pd_unit ?? undefined} />
               </div>
               <div>
                 <h4 className="mb-1 text-xs font-semibold text-slate-600 dark:text-slate-300">Temperature History</h4>

@@ -6,15 +6,8 @@ import { AssetMarker } from "./AssetMarker";
 import { PoleMarker } from "./PoleMarker";
 import { MeasurementPointMarker } from "./MeasurementPointMarker";
 import { PDPointMarker } from "./PDPointMarker";
+import { SEVERITY_DOT } from "@/components/detail/SeverityBadge";
 import { routeToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, CENTRAL_JAVA_BOUNDS, MIN_ZOOM } from "@/lib/geo";
-
-// Cable construction, not severity — SUTM is an overhead line (saluran udara),
-// SKTM is buried cable (saluran kabel). Severity still reads off the PD
-// measurement markers sitting along each route.
-const LINE_COLOR: Record<string, string> = {
-  SUTM: "#2563eb", // overhead — blue
-  SKTM: "#64748b", // underground — grey
-};
 
 export function MapView({
   assets,
@@ -74,7 +67,7 @@ export function MapView({
               key={asset.id}
               positions={routeToLatLngs(asset.route_geometry)}
               pathOptions={{
-                color: LINE_COLOR[asset.line_type ?? ""] ?? "#64748b",
+                color: SEVERITY_DOT[asset.latest_severity ?? "none"],
                 weight: asset.id === selectedAssetId ? 5 : 3,
               }}
               eventHandlers={{ click: () => onSelectAsset(asset.id) }}

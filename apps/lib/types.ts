@@ -115,6 +115,7 @@ export interface MeasurementPointListItem extends MeasurementPoint {
   latest_pd_unit: string | null;
   latest_temperature_c: number | null;
   latest_pd_device: string | null;
+  latest_surveyor: string | null;
   latest_surveyed_at: string | null;
   // Oldest-first PD magnitude series, for the marker popup's trend graph.
   // Optional: the frontend deploys independently of the backend, so a build

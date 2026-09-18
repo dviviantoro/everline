@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import type { MeasurementPointDetail } from "@/lib/types";
 import { SeverityBadge } from "./SeverityBadge";
 import { TimeSeriesChart } from "./TimeSeriesChart";
+import { PdTrendFooter } from "./PdTrendFooter";
+import { PD_CHART_ZONES } from "@/lib/severity";
 import { toCsv, downloadCsv } from "@/lib/csv";
 import { apiFetch } from "@/lib/api";
 
@@ -81,14 +83,16 @@ export function MeasurementPointDetailPanel({ pointId, onClose }: { pointId: str
             </dd>
             {point.readings[0] && (
               <>
-                <dt className="text-slate-500 dark:text-slate-400">Last PD magnitude</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Last value of PD magnitude</dt>
                 <dd>
                   {point.readings[0].pd_magnitude ?? "—"} {point.readings[0].pd_unit ?? ""}
                 </dd>
-                <dt className="text-slate-500 dark:text-slate-400">Last temperature</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Last value of temperature</dt>
                 <dd>{point.readings[0].temperature_c ?? "—"} °C</dd>
-                <dt className="text-slate-500 dark:text-slate-400">PD device</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Last device</dt>
                 <dd>{point.readings[0].pd_device ?? "—"}</dd>
+                <dt className="text-slate-500 dark:text-slate-400">Last surveyed operator</dt>
+                <dd>{point.readings[0].surveyor ?? "—"}</dd>
                 <dt className="text-slate-500 dark:text-slate-400">Last surveyed</dt>
                 <dd>{new Date(point.readings[0].surveyed_at).toLocaleDateString("en-GB")}</dd>
               </>
@@ -112,8 +116,10 @@ export function MeasurementPointDetailPanel({ pointId, onClose }: { pointId: str
                       unit: point.readings[0]?.pd_unit ?? undefined,
                     },
                   ]}
+                  zones={PD_CHART_ZONES}
                   height={160}
                 />
+                <PdTrendFooter readings={point.readings} unit={point.readings[0]?.pd_unit ?? undefined} />
               </div>
 
               <div className="mt-5">

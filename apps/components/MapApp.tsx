@@ -122,7 +122,6 @@ export function MapApp({
                 setSelectedAssetId(null);
                 setHighlightedPoints(null);
               }}
-              onSurveyAdded={refreshAssets}
               onLatestPointsChange={setHighlightedPoints}
             />
           )}

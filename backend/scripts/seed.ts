@@ -102,7 +102,14 @@ interface CorridorSeed {
   segmentMagnitudes: number[][][];
 }
 
-const PD_DEVICES = ["Doble PDS-100", "Techimp PDCheck", "Omicron MPD 600"];
+// The survey device is Cantol's own mobile unit — readings arrive from it, not
+// from a third-party instrument, so there is only one device model to seed.
+const PD_DEVICE = "Cantol-Mobile V1";
+
+// Measurement points are named after the span they sit on ("BK-1–BK-2 P2")
+// rather than a bare "Point 2", so a label identifies its location on the
+// network without needing the parent line for context.
+const shortPole = (label: string) => label.replace(/^Tiang\s+/i, "");
 
 const transformers: TransformerSeed[] = [
   { code: "GD-PKL-0001", name: "Gardu Panjang Wetan", rated_capacity_kva: 250, lat: CENTER.lat + 0.004, lng: CENTER.lng + 0.006, loadTrend: [55, 68, 82], manufacturer: "Trafindo", serial_number: "TRF-2019-0142", manufacture_year: 2019 },
@@ -112,7 +119,9 @@ const transformers: TransformerSeed[] = [
   { code: "GD-PKL-0005", name: "Gardu Kraton Kidul", rated_capacity_kva: 100, lat: CENTER.lat - 0.028, lng: CENTER.lng - 0.02, loadTrend: [30, 33, 35], manufacturer: "Morgan Schaffer", serial_number: "MGS-2021-0211", manufacture_year: 2021 },
   { code: "GD-PKL-0006", name: "Gardu Bendan", rated_capacity_kva: 160, lat: CENTER.lat + 0.001, lng: CENTER.lng - 0.018, loadTrend: [50, 54, 58], manufacturer: "Bambang Djaja", serial_number: "BDJ-2018-0164", manufacture_year: 2018 },
   { code: "GD-PKL-0007", name: "Gardu Tirto", rated_capacity_kva: 50, lat: CENTER.lat + 0.018, lng: CENTER.lng + 0.002, loadTrend: [65, 70, 90], manufacturer: "Starlite", serial_number: "STL-2014-0028", manufacture_year: 2014 },
-  { code: "GD-PKL-0008", name: "Gardu Buaran", rated_capacity_kva: 250, lat: CENTER.lat + 0.03, lng: CENTER.lng + 0.02, loadTrend: [45, 46, 44], manufacturer: "Trafindo", serial_number: "TRF-2022-0305", manufacture_year: 2022 },
+  // Kept south of lat -6.858: north of that line is the Java Sea / Pekalongan
+  // harbour basin, and assets seeded there render offshore on the map.
+  { code: "GD-PKL-0008", name: "Gardu Buaran", rated_capacity_kva: 250, lat: CENTER.lat + 0.008, lng: CENTER.lng + 0.022, loadTrend: [45, 46, 44], manufacturer: "Trafindo", serial_number: "TRF-2022-0305", manufacture_year: 2022 },
 ];
 
 const corridors: CorridorSeed[] = [
@@ -188,8 +197,8 @@ const corridors: CorridorSeed[] = [
     line_type: "SUTM",
     conductor_type: "AAAC 95mm2",
     poles: [
-      { label: "Tiang BF-1", lat: CENTER.lat + 0.03, lng: CENTER.lng + 0.02 },
-      { label: "Tiang BF-2", lat: CENTER.lat + 0.034, lng: CENTER.lng + 0.026 },
+      { label: "Tiang BF-1", lat: CENTER.lat + 0.006, lng: CENTER.lng + 0.018 },
+      { label: "Tiang BF-2", lat: CENTER.lat + 0.009, lng: CENTER.lng + 0.024 },
     ],
     segmentMagnitudes: [[[16, 14, 15]]],
   },
@@ -408,12 +417,13 @@ async function seedNetwork() {
       // evenly spaced, giving each location a stable identity so readings
       // taken at it across surveys can be graphed over time.
       const measurementCoords = interpolateAlongRoute(route, DEFAULT_MEASUREMENT_FRACTIONS);
+      const spanName = `${shortPole(poleA.label)}–${shortPole(poleB.label)}`;
       const pointIdBySeq = new Map<number, string>();
       for (const [seq, [lng, lat]] of measurementCoords.entries()) {
         const row = await insertOne<{ id: string; sequence_no: number }>("measurement_points", {
           asset_id: asset.id,
           sequence_no: seq + 1,
-          label: `Point ${seq + 1}`,
+          label: `${spanName} P${seq + 1}`,
           latitude: lat,
           longitude: lng,
         });
@@ -443,14 +453,13 @@ async function seedNetwork() {
           notes: i === surveys.length - 1 ? "Routine monthly patrol" : null,
         });
 
-        const device = PD_DEVICES[i % PD_DEVICES.length];
         const points = magnitudes.map((magnitude, seq) => {
           const [lng, lat] = measurementCoords[seq] ?? measurementCoords[measurementCoords.length - 1];
           return {
             survey_id: survey.id,
             measurement_point_id: pointIdBySeq.get(seq + 1) ?? null,
             sequence_no: seq + 1,
-            point_label: `Point ${seq + 1}`,
+            point_label: `${spanName} P${seq + 1}`,
             latitude: lat,
             longitude: lng,
             pd_magnitude: magnitude,
@@ -458,7 +467,7 @@ async function seedNetwork() {
             temperature_c: jitter(32 + magnitude * 0.3, 3),
             ambient_temp_c: jitter(30, 2),
             severity: severityFor(magnitude),
-            pd_device: device,
+            pd_device: PD_DEVICE,
           };
         });
 

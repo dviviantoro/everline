@@ -327,8 +327,8 @@ function ManualAssetForm({
               onChange={(e) => setLineType(e.target.value as LineType)}
               className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             >
-              <option value="SUTM">SUTM (overhead)</option>
-              <option value="SKTM">SKTM (underground)</option>
+              <option value="SUTM">SUTM</option>
+              <option value="SKTM">SKTM</option>
             </select>
           </div>
           <div>

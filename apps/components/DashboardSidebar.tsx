@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Map, Table2, FileBarChart, Settings, User, LogOut, Sun, Moon, ChevronLeft, Plus, type LucideIcon } from "lucide-react";
 import { SEVERITY_DOT } from "@/components/detail/SeverityBadge";
+import { radioSvg } from "@/components/map/radioIcon";
 import { BrandMark } from "@/components/BrandMark";
 import type { Theme } from "@/lib/useTheme";
 
@@ -93,10 +94,12 @@ export function DashboardSidebar({
         </SidebarSection>
 
         <SidebarSection title="Layers" collapsed={collapsed}>
+          {/* Glyphs mirror the map marker shapes — rectangle transformer,
+              circle pole, radio disc for a PD measurement point. */}
           <LayerCheckbox
             collapsed={collapsed}
             label="Transformers"
-            shape="circle"
+            shape="rect"
             color="#64748b"
             checked={layers.showTransformers}
             onChange={(v) => onLayersChange({ ...layers, showTransformers: v })}
@@ -112,7 +115,7 @@ export function DashboardSidebar({
           <LayerCheckbox
             collapsed={collapsed}
             label="Poles"
-            shape="diamond"
+            shape="circle"
             color="#94a3b8"
             checked={layers.showPoles}
             onChange={(v) => onLayersChange({ ...layers, showPoles: v })}
@@ -120,7 +123,7 @@ export function DashboardSidebar({
           <LayerCheckbox
             collapsed={collapsed}
             label="PD Measurement"
-            shape="square"
+            shape="radio"
             color="#64748b"
             checked={layers.showMeasurementPoints}
             onChange={(v) => onLayersChange({ ...layers, showMeasurementPoints: v })}
@@ -240,6 +243,8 @@ function SidebarLink({
   );
 }
 
+type GlyphShape = "circle" | "rect" | "line" | "radio";
+
 function LayerCheckbox({
   label,
   shape,
@@ -249,7 +254,7 @@ function LayerCheckbox({
   collapsed,
 }: {
   label: string;
-  shape: "circle" | "diamond" | "line" | "square";
+  shape: GlyphShape;
   color: string;
   checked: boolean;
   onChange: (v: boolean) => void;
@@ -267,24 +272,24 @@ function LayerCheckbox({
   );
 }
 
-function ShapeGlyph({
-  shape,
-  color,
-  dimmed,
-}: {
-  shape: "circle" | "diamond" | "line" | "square";
-  color: string;
-  dimmed?: boolean;
-}) {
+function ShapeGlyph({ shape, color, dimmed }: { shape: GlyphShape; color: string; dimmed?: boolean }) {
   const style = { opacity: dimmed ? 0.35 : 1 };
   if (shape === "circle") {
     return <span className="inline-block h-3 w-3 shrink-0 rounded-full border border-slate-500" style={{ background: color, ...style }} />;
   }
-  if (shape === "diamond") {
-    return <span className="inline-block h-2.5 w-2.5 shrink-0 rotate-45 border border-slate-500" style={{ background: color, ...style }} />;
-  }
   if (shape === "line") {
     return <span className="inline-block h-0.5 w-3.5 shrink-0" style={{ background: color, ...style }} />;
   }
-  return <span className="inline-block h-2.5 w-2.5 shrink-0 border border-slate-500" style={{ background: color, ...style }} />;
+  if (shape === "radio") {
+    return (
+      <span
+        className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center"
+        style={style}
+        // Shares the map marker's own SVG so the legend can't drift from it.
+        // The markup is a module constant with no interpolated input.
+        dangerouslySetInnerHTML={{ __html: radioSvg(color, 14) }}
+      />
+    );
+  }
+  return <span className="inline-block h-2.5 w-3.5 shrink-0 border border-slate-500" style={{ background: color, ...style }} />;
 }

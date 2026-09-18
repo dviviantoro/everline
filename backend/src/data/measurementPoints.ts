@@ -14,6 +14,7 @@ interface LatestReadingRow {
   pd_unit: string | null;
   temperature_c: number | null;
   pd_device: string | null;
+  surveyor: string | null;
   surveyed_at: string;
 }
 
@@ -25,7 +26,7 @@ async function attachLatestReading(points: MeasurementPoint[]): Promise<Measurem
   if (pointIds.length > 0) {
     const rows = await query<LatestReadingRow>(
       `select r.measurement_point_id, r.severity, r.pd_magnitude, r.pd_unit,
-              r.temperature_c, r.pd_device, s.surveyed_at
+              r.temperature_c, r.pd_device, s.surveyor, s.surveyed_at
        from pd_readings r
        join surveys s on s.id = r.survey_id
        where r.measurement_point_id = any($1)
@@ -54,6 +55,7 @@ async function attachLatestReading(points: MeasurementPoint[]): Promise<Measurem
       latest_pd_unit: latest?.pd_unit ?? null,
       latest_temperature_c: latest?.temperature_c ?? null,
       latest_pd_device: latest?.pd_device ?? null,
+      latest_surveyor: latest?.surveyor ?? null,
       latest_surveyed_at: latest?.surveyed_at ?? null,
     };
   });

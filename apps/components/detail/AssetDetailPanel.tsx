@@ -4,28 +4,23 @@ import { useEffect, useState } from "react";
 import type { AssetDetail, PdReading } from "@/lib/types";
 import { worstSeverity } from "@/lib/severity";
 import { SeverityBadge } from "./SeverityBadge";
-import { SurveyHistoryTimeline } from "./SurveyHistoryTimeline";
 import { NameplateSection } from "./NameplateSection";
 import { TelemetryPanel } from "./TelemetryPanel";
 import { LinePointsPanel } from "./LinePointsPanel";
 import { CollapsibleSection } from "./CollapsibleSection";
-import { TransformerSurveyForm } from "@/components/forms/TransformerSurveyForm";
 import { apiFetch } from "@/lib/api";
 
 export function AssetDetailPanel({
   assetId,
   onClose,
-  onSurveyAdded,
   onLatestPointsChange,
 }: {
   assetId: string;
   onClose: () => void;
-  onSurveyAdded: () => void;
   onLatestPointsChange: (points: Omit<PdReading, "survey_id">[] | null) => void;
 }) {
   const [detail, setDetail] = useState<AssetDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [formOpen, setFormOpen] = useState(false);
 
   // No setState before the first await, so effect-mount fetches (below) never
   // call setState synchronously from the effect body.
@@ -40,13 +35,6 @@ export function AssetDetailPanel({
     } else {
       onLatestPointsChange(null);
     }
-  }
-
-  // Used by the "Add Survey" success handlers to explicitly show a loading
-  // state while refetching after a mutation (not called from the effect).
-  function reload() {
-    setLoading(true);
-    fetchDetail();
   }
 
   useEffect(() => {
@@ -70,6 +58,9 @@ export function AssetDetailPanel({
 
       {loading && <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Loading…</p>}
 
+      {/* Neither asset type has a manual entry path: transformer telemetry
+          arrives from its meter and PD readings from the survey device, so this
+          panel is read-only for both. */}
       {detail && (
         <>
           <div className="mt-4">
@@ -91,48 +82,9 @@ export function AssetDetailPanel({
             </>
           )}
 
-          {/* Lines have no manual entry path: PD readings are captured by the
-              survey device and arrive through the API, not typed in here. */}
-          {detail.type === "transformer" && (
-            <>
-              <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <button
-                  onClick={() => setFormOpen((v) => !v)}
-                  className="w-full rounded bg-slate-800 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
-                >
-                  {formOpen ? "Cancel" : "Add Survey"}
-                </button>
-              </div>
-
-              {formOpen && (
-                <div className="mt-3 rounded border border-slate-200 p-3 dark:border-slate-800">
-                  <TransformerSurveyForm
-                    assetId={detail.id}
-                    onCancel={() => setFormOpen(false)}
-                    onSuccess={() => {
-                      setFormOpen(false);
-                      reload();
-                      onSurveyAdded();
-                    }}
-                  />
-                </div>
-              )}
-            </>
-          )}
-
           {detail.type === "line" && (
             <CollapsibleSection title="Point Measurements">
               <LinePointsPanel assetId={detail.id} />
-            </CollapsibleSection>
-          )}
-
-          {detail.type === "transformer" && (
-            <CollapsibleSection title="Survey History">
-              <SurveyHistoryTimeline
-                surveys={detail.surveys}
-                type={detail.type}
-                assetPosition={{ latitude: detail.latitude, longitude: detail.longitude }}
-              />
             </CollapsibleSection>
           )}
         </>

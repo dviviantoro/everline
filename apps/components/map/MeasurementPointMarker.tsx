@@ -65,14 +65,16 @@ export function MeasurementPointMarker({
           <SeverityBadge value={point.latest_severity} />
 
           <dl className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-            <dt className="text-slate-500">PD magnitude</dt>
+            <dt className="text-slate-500">Last value of PD magnitude</dt>
             <dd>
               {point.latest_pd_magnitude ?? "—"} {point.latest_pd_unit ?? ""}
             </dd>
-            <dt className="text-slate-500">Temperature</dt>
+            <dt className="text-slate-500">Last value of temperature</dt>
             <dd>{point.latest_temperature_c ?? "—"} °C</dd>
-            <dt className="text-slate-500">Device</dt>
+            <dt className="text-slate-500">Last device</dt>
             <dd>{point.latest_pd_device ?? "—"}</dd>
+            <dt className="text-slate-500">Last surveyed operator</dt>
+            <dd>{point.latest_surveyor ?? "—"}</dd>
             <dt className="text-slate-500">Measured</dt>
             <dd>
               {point.latest_surveyed_at

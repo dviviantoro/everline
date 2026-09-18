@@ -1,12 +1,20 @@
 "use client";
 
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
+import { Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 
 export interface ChartSeries {
   key: string;
   label: string;
   color: string;
   unit?: string;
+}
+
+/** Horizontal severity band drawn behind the series (normal/caution/danger). */
+export interface ChartZone {
+  from: number;
+  to: number;
+  color: string;
+  label: string;
 }
 
 function formatTime(iso: string) {
@@ -17,11 +25,13 @@ export function TimeSeriesChart({
   data,
   xKey,
   series,
+  zones,
   height = 220,
 }: {
   data: Record<string, unknown>[];
   xKey: string;
   series: ChartSeries[];
+  zones?: ChartZone[];
   height?: number;
 }) {
   if (data.length === 0) {
@@ -39,13 +49,39 @@ export function TimeSeriesChart({
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+        {/* Declared before the series so the bands paint underneath it. */}
+        {zones?.map((z) => (
+          <ReferenceArea
+            key={z.label}
+            y1={z.from}
+            y2={z.to}
+            fill={z.color}
+            fillOpacity={0.1}
+            stroke="none"
+            ifOverflow="hidden"
+          />
+        ))}
         <XAxis
           dataKey={xKey}
           tickFormatter={formatTime}
           tick={{ fontSize: 10, fill: "var(--chart-axis)" }}
           minTickGap={30}
         />
-        <YAxis tick={{ fontSize: 10, fill: "var(--chart-axis)" }} width={36} />
+        <YAxis
+          tick={{ fontSize: 10, fill: "var(--chart-axis)" }}
+          width={36}
+          // With bands present, anchor the scale at 0 and keep it tall enough
+          // that the danger threshold stays visible even when readings are low.
+          domain={
+            zones
+              ? [
+                  0,
+                  (dataMax: number) =>
+                    Math.max(Math.ceil(dataMax * 1.15), Math.ceil(zones[zones.length - 1].from * 1.1)),
+                ]
+              : undefined
+          }
+        />
         <Tooltip
           labelFormatter={(v) => formatTime(String(v))}
           contentStyle={{
