@@ -109,6 +109,15 @@ export interface MeasurementPoint {
 
 export interface MeasurementPointListItem extends MeasurementPoint {
   latest_severity: Severity | null; // null = no reading recorded yet
+  // Latest reading's values, flattened onto the list row so map markers can
+  // show measurements on hover without one request per point.
+  latest_pd_magnitude: number | null;
+  latest_pd_unit: string | null;
+  latest_temperature_c: number | null;
+  latest_pd_device: string | null;
+  latest_surveyed_at: string | null;
+  // Oldest-first PD magnitude series, for the marker popup's trend graph.
+  history: { surveyed_at: string; pd_magnitude: number | null }[];
 }
 
 export interface MeasurementReadingEntry {
@@ -160,6 +169,12 @@ export interface AssetListItem extends Asset {
   latest_condition?: Condition | null; // transformer only
   latest_severity?: Severity | null; // line only — worst severity among latest survey's points
   last_surveyed_at: string | null;
+  // Latest transformer reading, flattened for marker hover (transformer only).
+  latest_load_percent?: number | null;
+  latest_oil_temp_c?: number | null;
+  latest_voltage_secondary_v?: number | null;
+  // Oldest-first load% series, for the marker popup's trend graph.
+  history?: { surveyed_at: string; load_percent: number | null }[];
 }
 
 export interface TransformerSurveyEntry extends Survey {

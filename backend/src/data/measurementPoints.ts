@@ -7,13 +7,25 @@ import type {
   Severity,
 } from "../types";
 
-async function attachLatestSeverity(points: MeasurementPoint[]): Promise<MeasurementPointListItem[]> {
+interface LatestReadingRow {
+  measurement_point_id: string;
+  severity: Severity | null;
+  pd_magnitude: number | null;
+  pd_unit: string | null;
+  temperature_c: number | null;
+  pd_device: string | null;
+  surveyed_at: string;
+}
+
+async function attachLatestReading(points: MeasurementPoint[]): Promise<MeasurementPointListItem[]> {
   const pointIds = points.map((p) => p.id);
-  const latestByPoint = new Map<string, Severity | null>();
+  const latestByPoint = new Map<string, LatestReadingRow>();
+  const historyByPoint = new Map<string, { surveyed_at: string; pd_magnitude: number | null }[]>();
 
   if (pointIds.length > 0) {
-    const rows = await query<{ measurement_point_id: string; severity: Severity | null; surveyed_at: string }>(
-      `select r.measurement_point_id, r.severity, s.surveyed_at
+    const rows = await query<LatestReadingRow>(
+      `select r.measurement_point_id, r.severity, r.pd_magnitude, r.pd_unit,
+              r.temperature_c, r.pd_device, s.surveyed_at
        from pd_readings r
        join surveys s on s.id = r.survey_id
        where r.measurement_point_id = any($1)
@@ -23,18 +35,34 @@ async function attachLatestSeverity(points: MeasurementPoint[]): Promise<Measure
 
     for (const r of rows) {
       if (!latestByPoint.has(r.measurement_point_id)) {
-        latestByPoint.set(r.measurement_point_id, r.severity);
+        latestByPoint.set(r.measurement_point_id, r);
       }
+      const list = historyByPoint.get(r.measurement_point_id) ?? [];
+      list.push({ surveyed_at: r.surveyed_at, pd_magnitude: r.pd_magnitude });
+      historyByPoint.set(r.measurement_point_id, list);
     }
   }
 
-  return points.map((p) => ({ ...p, latest_severity: latestByPoint.get(p.id) ?? null }));
+  return points.map((p) => {
+    const latest = latestByPoint.get(p.id);
+    return {
+      ...p,
+      // rows arrive newest-first; the graph wants oldest-first
+      history: (historyByPoint.get(p.id) ?? []).slice().reverse(),
+      latest_severity: latest?.severity ?? null,
+      latest_pd_magnitude: latest?.pd_magnitude ?? null,
+      latest_pd_unit: latest?.pd_unit ?? null,
+      latest_temperature_c: latest?.temperature_c ?? null,
+      latest_pd_device: latest?.pd_device ?? null,
+      latest_surveyed_at: latest?.surveyed_at ?? null,
+    };
+  });
 }
 
 /** All measurement points across every line — used by the map. */
 export async function getAllMeasurementPoints(): Promise<MeasurementPointListItem[]> {
   const points = await query<MeasurementPoint>("select * from measurement_points order by sequence_no asc");
-  return attachLatestSeverity(points);
+  return attachLatestReading(points);
 }
 
 /** Measurement points on one line — used by the PD survey form's point picker. */
@@ -43,7 +71,7 @@ export async function getMeasurementPointsForAsset(assetId: string): Promise<Mea
     "select * from measurement_points where asset_id = $1 order by sequence_no asc",
     [assetId]
   );
-  return attachLatestSeverity(points);
+  return attachLatestReading(points);
 }
 
 /**

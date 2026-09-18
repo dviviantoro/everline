@@ -116,6 +116,10 @@ export interface MeasurementPointListItem extends MeasurementPoint {
   latest_temperature_c: number | null;
   latest_pd_device: string | null;
   latest_surveyed_at: string | null;
+  // Oldest-first PD magnitude series, for the marker popup's trend graph.
+  // Optional: the frontend deploys independently of the backend, so a build
+  // can be live before the API that returns this field.
+  history?: { surveyed_at: string; pd_magnitude: number | null }[];
 }
 
 export interface MeasurementReadingEntry {
@@ -171,6 +175,8 @@ export interface AssetListItem extends Asset {
   latest_load_percent?: number | null;
   latest_oil_temp_c?: number | null;
   latest_voltage_secondary_v?: number | null;
+  // Oldest-first load% series, for the marker popup's trend graph.
+  history?: { surveyed_at: string; load_percent: number | null }[];
 }
 
 export interface TransformerSurveyEntry extends Survey {

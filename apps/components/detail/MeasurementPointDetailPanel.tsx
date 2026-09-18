@@ -125,34 +125,6 @@ export function MeasurementPointDetailPanel({ pointId, onClose }: { pointId: str
                   height={160}
                 />
               </div>
-
-              <div className="mt-5">
-                <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Reading History</h3>
-                <ul className="space-y-2">
-                  {point.readings.map((r) => (
-                    <li key={r.id} className="flex items-center gap-2 rounded border border-slate-100 dark:border-slate-800 p-2 text-xs">
-                      {r.photo_url ? (
-                        <a href={r.photo_url} target="_blank" rel="noreferrer" className="shrink-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element -- external Supabase Storage URL, not a local asset */}
-                          <img src={r.photo_url} alt="PD evidence" className="h-10 w-10 rounded object-cover" />
-                        </a>
-                      ) : (
-                        <div className="h-10 w-10 shrink-0 rounded bg-slate-100 dark:bg-slate-800" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{new Date(r.surveyed_at).toLocaleDateString("en-GB")}</span>
-                          <SeverityBadge value={r.severity} />
-                        </div>
-                        <p className="truncate text-slate-500 dark:text-slate-400">
-                          {r.pd_magnitude ?? "—"} {r.pd_unit ?? ""} · {r.temperature_c ?? "—"}°C
-                          {r.pd_device ? ` · ${r.pd_device}` : ""}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
             </>
           )}
         </>

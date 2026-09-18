@@ -14,6 +14,38 @@ function jitter(base: number, spread: number) {
   return Math.round((base + (Math.random() - 0.5) * spread) * 10) / 10;
 }
 
+// The trends further down are authored as a few anchor values carrying an
+// intentional story (discharge climbing on one span, a transformer creeping
+// toward overload). Three anchors tell that story but plot as an almost empty
+// graph, so each trend is interpolated up to READINGS_PER_TREND samples with a
+// small wobble — same shape, enough points to read as a trend line. The wobble
+// is derived from the seed rather than Math.random so re-seeding is stable.
+const READINGS_PER_TREND = 12;
+const SURVEY_INTERVAL_DAYS = 30;
+
+function seedFrom(text: string): number {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) % 100_000;
+  return h;
+}
+
+function wobble(seed: number): number {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x) - 0.5; // -0.5 .. 0.5
+}
+
+function expandTrend(anchors: number[], seed: number, count = READINGS_PER_TREND): number[] {
+  if (anchors.length < 2) return Array.from({ length: count }, () => anchors[0] ?? 0);
+  return Array.from({ length: count }, (_, i) => {
+    const pos = (i / (count - 1)) * (anchors.length - 1);
+    const lo = Math.floor(pos);
+    const hi = Math.min(lo + 1, anchors.length - 1);
+    const base = anchors[lo] + (anchors[hi] - anchors[lo]) * (pos - lo);
+    const value = base + wobble(seed + i * 7.31) * Math.max(1, base * 0.08);
+    return Math.round(value * 10) / 10;
+  });
+}
+
 async function insertOne<T = Record<string, unknown>>(table: string, fields: Record<string, unknown>): Promise<T> {
   const columns = Object.keys(fields);
   const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
@@ -225,13 +257,14 @@ async function seedTransformers(): Promise<Map<string, string>> {
     });
     assetIdByCode.set(t.code, asset.id);
 
-    for (const [i, loadPercent] of t.loadTrend.entries()) {
-      const surveyedAt = daysAgo((t.loadTrend.length - 1 - i) * 30);
+    const loadSeries = expandTrend(t.loadTrend, seedFrom(t.code));
+    for (const [i, loadPercent] of loadSeries.entries()) {
+      const surveyedAt = daysAgo((loadSeries.length - 1 - i) * SURVEY_INTERVAL_DAYS);
       const survey = await insertOne<{ id: string }>("surveys", {
         asset_id: asset.id,
         surveyed_at: surveyedAt,
         surveyor: SURVEYORS[i % SURVEYORS.length],
-        notes: i === t.loadTrend.length - 1 ? "Routine monthly patrol" : null,
+        notes: i === loadSeries.length - 1 ? "Routine monthly patrol" : null,
       });
 
       await insertOne("transformer_readings", {
@@ -387,9 +420,22 @@ async function seedNetwork() {
         pointIdBySeq.set(row.sequence_no, row.id);
       }
 
-      const surveys = corridor.segmentMagnitudes[seg];
+      // Each measurement point has its own trend across surveys, so expand the
+      // points independently and re-assemble one magnitude triple per survey.
+      const anchorSurveys = corridor.segmentMagnitudes[seg];
+      const pointCount = anchorSurveys[0]?.length ?? 0;
+      const perPointSeries = Array.from({ length: pointCount }, (_, p) =>
+        expandTrend(
+          anchorSurveys.map((s) => s[p]),
+          seedFrom(`${corridor.code}-${seg}-${p}`)
+        )
+      );
+      const surveys = Array.from({ length: READINGS_PER_TREND }, (_, i) =>
+        perPointSeries.map((series) => series[i])
+      );
+
       for (const [i, magnitudes] of surveys.entries()) {
-        const surveyedAt = daysAgo((surveys.length - 1 - i) * 30);
+        const surveyedAt = daysAgo((surveys.length - 1 - i) * SURVEY_INTERVAL_DAYS);
         const survey = await insertOne<{ id: string }>("surveys", {
           asset_id: asset.id,
           surveyed_at: surveyedAt,
