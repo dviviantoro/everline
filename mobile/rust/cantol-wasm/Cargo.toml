@@ -1,0 +1,19 @@
+[package]
+name = "cantol-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "wasm-bindgen facade over cantol-proto and cantol-dsp for the app's Web Worker."
+
+[lib]
+# cdylib is the .wasm module; rlib lets the native tests link the same code.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cantol-proto.workspace = true
+cantol-dsp.workspace = true
+wasm-bindgen.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,10 @@
+[package]
+name = "cantol-proto"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Red Pitaya link protocol (PLACEHOLDER, to be agreed): frame codec, CRC32, streaming decoder. Pure Rust, no I/O."
+
+[lints]
+workspace = true

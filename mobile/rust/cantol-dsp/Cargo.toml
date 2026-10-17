@@ -1,0 +1,10 @@
+[package]
+name = "cantol-dsp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "PD signal processing and severity classification. Pure Rust, no I/O."
+
+[lints]
+workspace = true

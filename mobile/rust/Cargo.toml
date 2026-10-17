@@ -1,0 +1,30 @@
+[workspace]
+resolver = "3"
+members = ["cantol-proto", "cantol-dsp", "cantol-wasm", "rp-mock"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+
+[workspace.dependencies]
+cantol-proto = { path = "cantol-proto" }
+cantol-dsp = { path = "cantol-dsp" }
+# Must equal the installed wasm-bindgen CLI exactly (`wasm-bindgen --version`); scripts/build-wasm.sh checks it.
+wasm-bindgen = "=0.2.128"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# Used by scripts/build-wasm.sh. Size matters more than speed for the module shipped in the APK.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

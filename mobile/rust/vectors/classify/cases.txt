@@ -1,0 +1,13 @@
+# magnitude (dBmV) and the severity the app must report.
+# PROVISIONAL zones: warning from 20, critical from 40 (apps/lib/severity.ts PD_ZONES).
+# Replayed natively (cargo test), in Node, and inside the Capacitor WebView self-test.
+-60 normal
+-12.5 normal
+0 normal
+19.999 normal
+20 warning
+39.999 warning
+40 critical
+100 critical
+nan unknown
+inf unknown
