@@ -11,6 +11,12 @@
 | P2 | TASK-001 | Todo | Create `dev-docs/architecture/{api-flow,backend-structure,database}.md` | `frontend-structure.md` already exists; these three siblings don't yet. Not required for MVP functionality. |
 | P2 | TASK-002 | Todo | Decide on and add automated test coverage (Vitest for `lib/`, Playwright for the 5 core flows) | So far only manual/ad hoc verification exists — no test runner in `package.json` |
 | P3 | TASK-003 | Todo | First Vercel deployment + smoke test | Per `planning/timeline.md` Phase 3 — needs a decision on whether to connect a GitHub remote first |
+| P1 | TASK-004 | In Progress | Mobile Phase 0: env script, Rust workspace + golden vectors, minimal Capacitor shell with `/diag/selftest`, hotspot/RP-reachability spike on real phones, CORS for `https://localhost` | ADR-002, ADR-003, `dev-docs/architecture/mobile-app.md`. Needs a physical phone with USB debugging and the VPS CORS change. |
+| P1 | TASK-005 | Todo | Mobile Phases 1-2: app scaffold, then the connection wizard (permissions, hotspot, discover/ping, GPS) | Exit: wizard reaches READY on 3 phones against the Mac `rp-mock` |
+| P1 | TASK-006 | Todo | Mobile Phase 3: live pipeline (`cantol-proto/dsp/wasm`, Worker, live PRPD/gauge UI) | Gate: decide where PD detection runs (RP or phone) before starting; if the RP sends final numbers only, drop WASM |
+| P1 | TASK-007 | Todo | Mobile Phase 4: capture and online-only upload of a PD survey | Needs CORS change deployed on the VPS |
+| P2 | TASK-008 | Todo | Backend ingest hardening for the mobile app (migration 005, idempotency via `client_survey_id`, transaction, honest status codes) | ADR-004 to be written; schema sync of `planning/schema.sql` needs explicit approval |
+| P2 | TASK-009 | Todo | Mobile Phase 5: offline queue, foreground service, release signing, sideload/Play checklist, per-device key | |
 
 ---
 
