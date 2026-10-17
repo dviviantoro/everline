@@ -1,0 +1,17 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light dark;
+}
+
+/* A media query rather than light-dark(), which needs Chrome 123 (the proposed floor is 111). */
+body {
+  margin: 0;
+  background: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #0a0a0a;
+  }
+}

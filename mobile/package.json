@@ -1,0 +1,47 @@
+{
+  "name": "cantol-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "ensure-wasm": "node scripts/ensure-wasm.mjs",
+    "wasm": "bash scripts/build-wasm.sh",
+    "dev": "vite",
+    "prebuild": "npm run ensure-wasm",
+    "build": "vite build",
+    "preview": "vite preview",
+    "pretypecheck": "npm run ensure-wasm",
+    "typecheck": "tsc --noEmit",
+    "prelint": "npm run ensure-wasm",
+    "lint": "eslint --max-warnings 0 .",
+    "pretest": "npm run ensure-wasm",
+    "test": "vitest run",
+    "cap:sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.0",
+    "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  }
+}
