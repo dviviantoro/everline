@@ -10,9 +10,12 @@
 |------|--------|------------|-------|
 | `apps` | `dev` | `364cf2d` (uncommitted changes on top — several rounds since) | Frontend only as of this round — all server-side DB/API logic removed, everything now goes through `lib/api.ts` to the external backend |
 | `backend` | (new, uncommitted) | — | New separate git repo, Express + Postgres + MinIO + Caddy, Dockerized. Built and verified end-to-end locally in the dev sandbox (not yet deployed to the user's actual VPS) |
+| `mobile` | `master` | `d6e4411` | Android field-capture app (Capacitor 8 + Rust/WASM), Phase 0 in progress: Rust workspace, golden vectors, shell with a WASM self-test, debug APK builds. Not yet run on a phone. See ADR-002/003 and `dev-docs/architecture/mobile-app.md`. |
 
-| Last Updated | 2026-09-16 |
-| Updated By | Claude Sonnet 5 |
+> Note on the repo layout: the rows above were written for the earlier two-repo layout. Today there is one git repository at the project root (`master`, remote `origin`) containing `apps/`, `backend/`, `mobile/`, `dev-docs/`, `planning/` and `ai-rules/`; the commit hashes in the older rows no longer exist in it.
+
+| Last Updated | 2026-10-18 |
+| Updated By | Claude Sonnet 5.5 |
 
 ---
 
@@ -53,6 +56,8 @@
 | Dashboard Sidebar & Nav | apps | Beta | Layer toggles (Transformers/Lines/Poles/PD Measurement), legend, Add Asset, amber-tinted `wire.png` logo, plus Asset Registry/Reports/Settings/Profile/Logout nav items and a light/dark theme toggle |
 | Backend / API Split | backend | Beta | New Express + `pg` + MinIO + Caddy stack in `backend/`, replacing Supabase entirely — see `backend/README.md`. Verified locally end-to-end (build, `docker compose up`, seed, curl smoke tests covering auth/CRUD/import/upload, Swagger docs) via Docker in the dev sandbox. **Not yet deployed to the user's real VPS** — that's the user's next step |
 | Auth / RBAC | apps + backend | Planned | Still deferred per `planning/PROJECT_BRIEF.md` §5. The backend's `X-API-Key` header is a minimal shared-secret safeguard, explicitly not real auth |
+| Mobile Rust workspace | mobile | Alpha | `cantol-proto` (placeholder Red Pitaya protocol: frame codec, CRC32, resyncing decoder), `cantol-dsp` (severity zones only for now), `cantol-wasm` (27 KB facade), `rp-mock` (simulated Red Pitaya with fault injection). 42 native tests; 9 golden decode vectors plus classification vectors replayed in Node and in Chromium 153 with identical digest `f7f47846`. Not yet verified inside the Capacitor WebView on a phone. |
+| Mobile app shell | mobile | Alpha | Vite + React + Tailwind 4 + Capacitor 8; one screen (WASM self-test). Debug APK builds with JDK 21 (4.2 MB, `allowBackup` off, INTERNET only). No wizard, hotspot handling, GPS or upload yet (TASK-005 to TASK-009). |
 
 ---
 
@@ -70,6 +75,10 @@ See `dev-docs/ai/TASKS.md` for the live list.
 | `apps` | `build` (next build + tsc) | — | Passing |
 | `apps` | manual E2E (ad hoc Playwright, not committed) | all 7 modules + login flow + console-error checks | Passing (last run 2026-09-05) |
 | `apps` | automated test suite | 0% | Not Run — none exists yet |
+| `mobile` | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace` | 42 tests: protocol codec, decoder, golden vectors (9 streams x 11 chunkings), severity, mock RP end-to-end over loopback sockets | Passing (2026-10-18) |
+| `mobile` | `npm run typecheck`, `npm run lint`, `npm test` (Vitest) | 6 tests: vectors through the real WASM in Node, negative controls, throughput, FNV-1a | Passing (2026-10-18) |
+| `mobile` | `npm run build`, `scripts/android-build.sh` | production bundle 292 KB; debug APK 4.2 MB | Passing (2026-10-18) |
+| `mobile` | self-test in a real browser | headless Chromium 153: PASS, 0.32 ms per 64 KiB, `.wasm` served as `application/wasm` | Passing (2026-10-18). **Not yet run in an Android WebView.** |
 
 ---
 
@@ -86,5 +95,9 @@ See `dev-docs/ai/TASKS.md` for the live list.
 - Assumption based on repository analysis: severity/condition values are always operator-entered; nothing in the app computes them from a threshold at runtime. The load%/PD-magnitude cutoffs in `backend/scripts/seed.ts` only shape plausible-looking dummy data and are explicitly commented as not a production rule (`planning/PROJECT_BRIEF.md` §16).
 - `leaflet` is patched via `patch-package` (`apps/patches/leaflet+1.9.4.patch`) for an upstream `_leaflet_pos` crash (Leaflet/Leaflet#9527) — the fix exists in Leaflet's source but was never released to npm (1.9.4 is still `latest`). Drop the patch once a release newer than 1.9.4 ships with it.
 - `allowedDevOrigins` in `apps/next.config.ts` computes the machine's current LAN IPs at server startup (`os.networkInterfaces()`) instead of a hardcoded address — a hardcoded IP already went stale once (network change), silently re-triggering the "map stuck forever on 'Loading map…', zero console errors" bug, since the map is client-only (`ssr:false`) with no server-rendered fallback to reveal anything was wrong. Unrelated to the backend split (this affects reaching the Next.js dev server itself, not the API).
+- **Superseded:** the two bullets about git living in `apps/` and `backend/` (and about the project root not being a repository) describe an earlier state. The project root is now one git repository on `master` that tracks `apps/`, `backend/`, `mobile/`, `dev-docs/`, `planning/` and `ai-rules/`.
+- **Mobile app (2026-10-18):** `mobile/` was added under ADR-002 and ADR-003, which override `planning/PROJECT_BRIEF.md` §4 (native mobile app, live telemetry, offline capture as non-goals). `planning/*` was left untouched. Android has no public API to turn on the tethering hotspot or set its SSID/password, so v1 is a guided one-time hotspot setup plus one toggle per session. The Red Pitaya protocol is a placeholder and the RP-side software is undecided; whether WASM stays depends on whether the RP or the phone does pulse detection (decision gate before TASK-006).
+- **Pending user actions for the mobile app:** plug in a phone with USB debugging; add `https://localhost` to `CORS_ORIGIN` in the VPS `backend/.env` and run `docker compose up -d` (the Capacitor WebView origin; an origin missing from the list gets an HTTP 500 with no CORS headers); choose the hotspot SSID/password (kept only in gitignored local files).
+- Open question for the user, not decided: the planning docs say "dummy data only, no real PLN asset data in this phase". Whether data captured by a real Red Pitaya on real lines counts as real asset data is unanswered; until it is, the app should only upload to the existing POC dataset.
 - Root of this repository is intentionally not a git repository. Git now lives in **two** places: `apps/` (frontend) and the new `backend/` (API/DB/storage) — this activates the framework's "Fullstack" project-type convention (`ai-rules/AGENTS.md` §0), which was defined but unused until this round.
 - **Contradiction found in the framework itself:** `ai-rules/AGENTS.md` §0/§0a forbid `git init` at the project root, yet §5's merge procedure runs `git restore ... ../ai-rules ../dev-docs ../planning ...` relative to the `apps/` repo — paths outside any repo rooted at `apps/` can never be tracked by it. Practical effect right now: `planning/`, `dev-docs/`, and `ai-rules/` at the project root have **no version control at all** — confirmed by running `git ls-files --error-unmatch ../dev-docs` from inside `apps/`, which fails because that path is outside the repository. Flagged to the user this session; unresolved as of this writing.

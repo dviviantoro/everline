@@ -9,6 +9,7 @@
 | Repo | Current Version | Release Date | Notes |
 |------|----------------|---------------|-------|
 | `apps` | `0.1.0` | — (not yet released/deployed) | development — matches `apps/package.json`, not yet tagged or deployed |
+| `mobile` | `0.1.0` | — (not yet released) | development — matches `mobile/package.json`; Phase 0 shell and Rust workspace only, no wizard or upload yet (TASK-004 to TASK-009) |
 
 ---
 

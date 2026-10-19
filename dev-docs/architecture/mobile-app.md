@@ -1,6 +1,18 @@
 # Mobile app architecture (`mobile/`)
 
-> Status: design, Phase 0 in progress. Decisions: ADR-002 (scope and stack), ADR-003 (hotspot and transport). This file is the repo-resident design; update it when the design changes.
+> Status: design, Phase 0 in progress (Mac side done 2026-10-18; on-phone checks pending). Decisions: ADR-002 (scope and stack), ADR-003 (hotspot and transport). This file is the repo-resident design; update it when the design changes.
+
+## Built so far
+
+| Piece | State |
+|---|---|
+| `mobile/rust` workspace (`cantol-proto`, `cantol-dsp`, `cantol-wasm`, `rp-mock`) and golden vectors | Done, 42 tests |
+| `mobile/` shell with the WASM self-test, debug APK | Done; self-test passes in Chromium, not yet run on a phone |
+| Kotlin plugins (`HotspotAssistant`, `RpLink`, `GnssHelper`), wizard, capture, upload | Not started (TASK-005 onward) |
+
+## How the WASM module is loaded
+
+`scripts/build-wasm.sh` builds with cargo (`wasm-release` profile) and the `wasm-bindgen` CLI (`--target web`), then shrinks with `wasm-opt` when present. The glue is initialised explicitly with `init({ module_or_path: response })` from a Worker, using a `?url` import of the `.wasm`; there is no `vite-plugin-wasm`. The `wasm-bindgen` crate is pinned (`=0.2.128`) to the installed CLI, and the build script fails with instructions if they differ. Under Node (Vitest) the module is loaded with `initSync({ module })`.
 
 ## Purpose
 
