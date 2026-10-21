@@ -94,7 +94,7 @@ function Step({
 
 export function CantolScreen() {
   const { hotspot } = useServices();
-  const { state, step, helpCard } = useWizard();
+  const { state, step, helpCard, manualAddress, discoveryError, retryDiscovery } = useWizard();
   const found = state.cantol === 'found' || state.cantol === 'linked' || state.cantol === 'lost';
   const linked = state.cantol === 'linked' || state.cantol === 'lost';
   const pinging = step === 'CANTOL_PING';
@@ -137,6 +137,22 @@ export function CantolScreen() {
           value={linked ? `${String(state.rttMs ?? 0)} ms` : pinging ? 'Opening' : 'Pending'}
         />
       </section>
+
+      {manualAddress !== null && !linked ? (
+        <section className="card stack" style={{ marginTop: 12, gap: 8 }} aria-label="Manual address">
+          <p style={{ margin: 0, fontSize: '0.9375rem' }}>
+            Looking only at <span className="mono">{manualAddress}</span>.
+          </p>
+          {discoveryError ? (
+            <p role="alert" style={{ margin: 0, fontSize: '0.875rem', color: 'var(--crit-text)' }}>
+              {discoveryError}
+            </p>
+          ) : null}
+          <button type="button" className="btn btn-secondary btn-sm" onClick={retryDiscovery}>
+            Search automatically instead
+          </button>
+        </section>
+      ) : null}
 
       {helpCard && !found ? (
         <section className="card" style={{ marginTop: 12 }} aria-label="Cantol was not found">

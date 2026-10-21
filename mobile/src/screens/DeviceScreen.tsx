@@ -41,7 +41,11 @@ function DeviceRow({
       {ok ? (
         <Pill tone="ok">{okLabel}</Pill>
       ) : (
-        <Link to={fixTo} aria-label={`${title}: ${warnLabel}. Open setup`} style={{ textDecoration: 'none' }}>
+        <Link
+          to={fixTo}
+          aria-label={`${title}: ${warnLabel}. Open setup`}
+          style={{ textDecoration: 'none', minHeight: 44, display: 'inline-flex', alignItems: 'center' }}
+        >
           <Pill tone="warn">{warnLabel}</Pill>
         </Link>
       )}

@@ -14,6 +14,7 @@
     "build": "vite build",
     "prebuild:demo": "npm run ensure-wasm",
     "build:demo": "VITE_DEMO=1 vite build",
+    "verify:demo": "node scripts/verify-demo-web.mjs",
     "preview": "vite preview",
     "pretypecheck": "npm run ensure-wasm",
     "typecheck": "tsc --noEmit",

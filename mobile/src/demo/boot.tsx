@@ -19,6 +19,9 @@ export async function bootDemo(container: HTMLElement): Promise<void> {
   });
   const runtime = createDemoRuntime({ store: createDexieStore(), dsp });
   runtime.world.run();
+  // A hook for the browser verification script (`scripts/verify-demo-web.mjs`): it forces the same
+  // switches the demo controls screen offers, without clicking through the screen each time.
+  Object.defineProperty(window, '__everlineDemo', { value: { controls: runtime.controls }, configurable: true });
   createRoot(container).render(
     <StrictMode>
       <AppRoot services={runtime.services} />
