@@ -13,6 +13,8 @@ import { LoginScreen } from '../screens/LoginScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
 import { SurveysScreen } from '../screens/SurveysScreen';
 import { TagScreen } from '../screens/TagScreen';
+import { TrackSetupScreen } from '../screens/TrackSetupScreen';
+import { TrackingScreen } from '../screens/TrackingScreen';
 import { SelfTestScreen } from '../selftest/SelfTestScreen';
 import { useServices } from './services';
 import { useSession } from './session';
@@ -71,6 +73,8 @@ export function AppRoutes() {
       <Route path="/setup/gps" element={<GpsScreen />} />
       <Route path="/device" element={<DeviceScreen />} />
       <Route path="/live" element={<LiveScreen />} />
+      <Route path="/track/setup" element={<TrackSetupScreen />} />
+      <Route path="/track" element={<TrackingScreen />} />
       <Route path="/tag" element={<TagScreen />} />
       <Route path="/surveys" element={<SurveysScreen />} />
       {config.extraRoutes.map((route) => (

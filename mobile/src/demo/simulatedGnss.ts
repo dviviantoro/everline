@@ -57,8 +57,9 @@ export class SimulatedGnss implements Gnss {
 
   /** A fix at the world position with a metre or two of error. */
   private makeFix(): GpsFix {
-    const east = this.rng.normal() * 1.2;
-    const north = this.rng.normal() * 1.2;
+    // The reported accuracy is 4 m, but a fix is steadier than that from one second to the next.
+    const east = this.rng.normal() * 0.8;
+    const north = this.rng.normal() * 0.8;
     const at = offsetLatLng(this.world.position, east, north);
     return {
       latitude: at.latitude,

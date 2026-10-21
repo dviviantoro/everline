@@ -55,8 +55,8 @@ interface Walk {
 }
 
 /** The dwell the simulated operator makes at the start pole and at each measurement point. */
-const START_DWELL_MS = 4000;
-const STATION_DWELL_MS = 6000;
+const START_DWELL_MS = 10_000;
+const STATION_DWELL_MS = 10_000;
 
 export class DemoWorld {
   timeMs = 0;

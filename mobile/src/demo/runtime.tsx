@@ -5,6 +5,7 @@ import type { Dsp } from '../core/dsp';
 import type { AppStore } from '../core/store';
 import { createControls, type ControlsStore } from './controls';
 import { DemoControlsScreen } from './DemoControlsScreen';
+import { DemoRouteObserver } from './DemoRouteObserver';
 import { buildDemoLines, type DemoLine } from './fixtures';
 import { SimulatedApi } from './simulatedApi';
 import { SimulatedCantol } from './simulatedCantol';
@@ -47,7 +48,7 @@ export function createDemoRuntime(deps: { store: AppStore; dsp: Dsp; now?: () =>
     footerLinks: [{ label: 'Demo controls', to: '/demo' }],
     extraRoutes,
     pdDevice: PD_DEVICE,
-    shellExtras: null,
+    shellExtras: <DemoRouteObserver world={world} />,
   };
 
   const services: Services = { config, dsp: deps.dsp, hotspot, link: cantol, gnss, api, store: deps.store, now };
