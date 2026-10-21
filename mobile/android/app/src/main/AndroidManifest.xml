@@ -3,7 +3,7 @@
 
     <!-- allowBackup is off: the app will hold diagnostics and queued surveys, and the device
          profile must never travel through a cloud backup. No cleartext flag and no network
-         security config on purpose: the RP link uses raw sockets in a native plugin (ADR-003). -->
+         security config on purpose: the Cantol link uses raw sockets in a native plugin (ADR-003). -->
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

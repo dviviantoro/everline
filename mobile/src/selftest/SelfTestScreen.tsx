@@ -110,7 +110,7 @@ export function SelfTestScreen() {
       <h1 className="text-lg font-bold">Cantol Mobile: Phase 0 self-test</h1>
       <p className="text-xs text-neutral-500">
         Replays the Rust golden vectors through the WASM module inside a Web Worker, the same way
-        the app will decode Red Pitaya frames.
+        the app will decode Cantol frames.
       </p>
       {state.phase === 'running' && <p className="text-sm">Running...</p>}
       {state.phase === 'failed' && <Badge ok={false} label={state.error} />}
