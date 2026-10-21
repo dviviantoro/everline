@@ -2,12 +2,12 @@ use std::process::ExitCode;
 use std::thread;
 use std::time::Duration;
 
-use rp_mock::{Config, spawn};
+use cantol_mock::{Config, spawn};
 
 const USAGE: &str = "\
-rp-mock: simulated Red Pitaya for the Cantol mobile app
+cantol-mock: simulated Red Pitaya for the Cantol mobile app
 
-usage: rp-mock [options]
+usage: cantol-mock [options]
   --bind ADDR             listen address                      (default 0.0.0.0)
   --port N                TCP data port                       (default 47000)
   --beacon-port N         UDP beacon port                     (default 47001)
@@ -29,7 +29,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(message) => {
-            eprintln!("rp-mock: {message}\n\n{USAGE}");
+            eprintln!("cantol-mock: {message}\n\n{USAGE}");
             ExitCode::from(2)
         }
     }
@@ -38,13 +38,16 @@ fn main() -> ExitCode {
 fn run(cfg: Config) -> ExitCode {
     match spawn(cfg) {
         Ok(handle) => {
-            eprintln!("rp-mock: listening on {} (Ctrl-C to stop)", handle.addr());
+            eprintln!(
+                "cantol-mock: listening on {} (Ctrl-C to stop)",
+                handle.addr()
+            );
             loop {
                 thread::sleep(Duration::from_secs(3600));
             }
         }
         Err(e) => {
-            eprintln!("rp-mock: cannot start: {e}");
+            eprintln!("cantol-mock: cannot start: {e}");
             ExitCode::FAILURE
         }
     }

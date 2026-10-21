@@ -4,10 +4,10 @@ use std::io::{Read, Write};
 use std::net::{TcpStream, UdpSocket};
 use std::time::{Duration, Instant};
 
+use cantol_mock::{Config, spawn};
 use cantol_proto::frame::{Kind, encode_frame};
 use cantol_proto::msg::{Beacon, Hello, Pong, decode_pd_events};
 use cantol_proto::{FrameDecoder, Stats};
-use rp_mock::{Config, spawn};
 
 const NONCE: u32 = 0xABCD_1234;
 

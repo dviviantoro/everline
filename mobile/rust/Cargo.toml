@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["cantol-proto", "cantol-dsp", "cantol-wasm", "rp-mock"]
+members = ["cantol-proto", "cantol-dsp", "cantol-wasm", "cantol-mock"]
 
 [workspace.package]
 version = "0.1.0"
