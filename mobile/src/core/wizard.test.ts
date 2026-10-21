@@ -26,7 +26,7 @@ const T0 = 1_000_000;
 const hotspotOn: WizardEvent = { type: 'HOTSPOT_STATUS', on: true, at: T0 };
 const cantolLinked: WizardEvent[] = [
   { type: 'CANTOL_SEARCH_STARTED', at: T0 },
-  { type: 'CANTOL_FOUND', address: '192.0.2.10' },
+  { type: 'CANTOL_FOUND', address: '192.0.2.10', deviceId: 'DEMO-001' },
   { type: 'CANTOL_LINKED', rttMs: 4 },
 ];
 const gpsGood: WizardEvent[] = [
@@ -52,7 +52,7 @@ describe('wizard steps follow the first unmet requirement', () => {
     feed({ type: 'HOTSPOT_STATUS', on: false, at: T0 });
     feed(hotspotOn);
     feed({ type: 'CANTOL_SEARCH_STARTED', at: T0 });
-    feed({ type: 'CANTOL_FOUND', address: '192.0.2.10' });
+    feed({ type: 'CANTOL_FOUND', address: '192.0.2.10', deviceId: 'DEMO-001' });
     feed({ type: 'CANTOL_LINKED', rttMs: 4 });
     feed({ type: 'GPS_PERMISSION', permission: 'granted' });
     feed({ type: 'GPS_SERVICES', enabled: true });
@@ -197,7 +197,7 @@ describe('the 60 s help card', () => {
     expect(helpCardVisible(wizardReducer(searching, { type: 'TICK', at: T0 + 59_999 }))).toBe(false);
     const waited = wizardReducer(searching, { type: 'TICK', at: T0 + 60_000 });
     expect(helpCardVisible(waited)).toBe(true);
-    expect(helpCardVisible(wizardReducer(waited, { type: 'CANTOL_FOUND', address: '192.0.2.10' }))).toBe(false);
+    expect(helpCardVisible(wizardReducer(waited, { type: 'CANTOL_FOUND', address: '192.0.2.10', deviceId: 'DEMO-001' }))).toBe(false);
   });
 });
 

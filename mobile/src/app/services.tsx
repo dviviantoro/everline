@@ -30,7 +30,9 @@ export interface AppConfig {
     skipAs: string | null;
   };
   /** Length of the "Record" window in seconds. */
-  recordSeconds(): number;
+  recordSeconds: () => number;
+  /** What the Surveys list calls a survey the server accepted ("Uploaded", or "Uploaded (demo)"). */
+  uploadedLabel: string;
   /** Extra links under the Ready screen's primary action. */
   footerLinks: readonly FooterLink[];
   /** Extra routes inside the signed-in shell. */

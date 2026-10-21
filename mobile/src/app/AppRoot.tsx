@@ -5,6 +5,7 @@ import { BackProvider } from './back';
 import { AppRoutes } from './routes';
 import { ServicesProvider, type Services } from './services';
 import { SessionProvider } from './session';
+import { SurveysProvider } from './surveys';
 import { ThemeProvider } from './theme';
 import { WizardProvider } from './wizard';
 
@@ -16,10 +17,12 @@ export function AppRoot({ services }: { services: Services }) {
           <HashRouter>
             <BackProvider>
               <WizardProvider>
-                <div className="app-root">
-                  <AppRoutes />
-                </div>
-                {services.config.shellExtras}
+                <SurveysProvider>
+                  <div className="app-root">
+                    <AppRoutes />
+                  </div>
+                  {services.config.shellExtras}
+                </SurveysProvider>
               </WizardProvider>
             </BackProvider>
           </HashRouter>

@@ -234,7 +234,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
           const candidate = await link.discover(
             manualAddress === null ? { signal } : { manualAddress, signal },
           );
-          dispatch({ type: 'CANTOL_FOUND', address: candidate.address });
+          dispatch({ type: 'CANTOL_FOUND', address: candidate.address, deviceId: candidate.deviceId });
           const ping = await link.ping(candidate, signal);
           await link.connect(candidate);
           if (aborted()) return;

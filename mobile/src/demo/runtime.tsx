@@ -43,6 +43,7 @@ export function createDemoRuntime(deps: { store: AppStore; dsp: Dsp; now?: () =>
       skipAs: DEMO_OPERATOR,
     },
     recordSeconds: () => (controls.get().fastRecording ? 10 : 60),
+    uploadedLabel: 'Uploaded (demo)',
     footerLinks: [{ label: 'Demo controls', to: '/demo' }],
     extraRoutes,
     pdDevice: PD_DEVICE,

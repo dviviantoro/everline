@@ -41,6 +41,8 @@ export interface WizardState {
 
   cantol: CantolFact;
   cantolAddress: string | null;
+  /** The id Cantol reported when found (for the Live header). */
+  cantolDeviceId: string | null;
   rttMs: number | null;
   /** When the current search began (for the 60 s help card). */
   searchStartedAt: number | null;
@@ -66,6 +68,7 @@ export const initialWizardState: WizardState = {
   hotspotLostAt: null,
   cantol: 'unknown',
   cantolAddress: null,
+  cantolDeviceId: null,
   rttMs: null,
   searchStartedAt: null,
   cantolLostAt: null,
@@ -83,7 +86,7 @@ export type WizardEvent =
   | { type: 'HOTSPOT_STATUS'; on: boolean; at: number }
   | { type: 'HOTSPOT_CONTINUE_ANYWAY' }
   | { type: 'CANTOL_SEARCH_STARTED'; at: number }
-  | { type: 'CANTOL_FOUND'; address: string }
+  | { type: 'CANTOL_FOUND'; address: string; deviceId: string }
   | { type: 'CANTOL_LINKED'; rttMs: number }
   | { type: 'LINK_LOST'; at: number }
   | { type: 'LINK_RESTORED' }
@@ -152,7 +155,7 @@ export function wizardReducer(s: WizardState, event: WizardEvent): WizardState {
       if (s.cantol === 'searching' || s.cantol === 'found' || s.cantol === 'linked') return s;
       return { ...s, cantol: 'searching', searchStartedAt: event.at, nowMs: Math.max(s.nowMs, event.at) };
     case 'CANTOL_FOUND':
-      return { ...s, cantol: 'found', cantolAddress: event.address };
+      return { ...s, cantol: 'found', cantolAddress: event.address, cantolDeviceId: event.deviceId };
     case 'CANTOL_LINKED':
       return { ...s, cantol: 'linked', rttMs: event.rttMs, cantolLostAt: null, searchStartedAt: null };
     case 'LINK_LOST':
@@ -179,7 +182,15 @@ export function wizardReducer(s: WizardState, event: WizardEvent): WizardState {
       let next: WizardState = { ...s, nowMs: now };
       // A link, hotspot or fix lost for longer than the grace period is gone: it must be found again.
       if (next.cantol === 'lost' && !withinGrace(next.cantolLostAt, now)) {
-        next = { ...next, cantol: 'unknown', cantolLostAt: null, cantolAddress: null, rttMs: null, streaming: false };
+        next = {
+          ...next,
+          cantol: 'unknown',
+          cantolLostAt: null,
+          cantolAddress: null,
+          cantolDeviceId: null,
+          rttMs: null,
+          streaming: false,
+        };
       }
       if (next.hotspotLostAt !== null && !withinGrace(next.hotspotLostAt, now)) {
         next = { ...next, hotspotLostAt: null };

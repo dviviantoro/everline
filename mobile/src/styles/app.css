@@ -705,6 +705,12 @@ textarea.input {
   padding: 12px;
   min-width: 0;
 }
+.tile-value .unit {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+}
 .tile-value {
   margin-top: 4px;
   font-family: 'Big Shoulders', sans-serif;
@@ -1006,4 +1012,45 @@ textarea.input {
   max-width: 420px;
   box-sizing: border-box;
   padding: 20px;
+}
+
+/* Asset picker on the Tag screen */
+.asset-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 264px;
+  overflow-y: auto;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.asset-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.asset-item:last-child {
+  border-bottom: 0;
+}
+.asset-item[aria-checked='true'] {
+  border-left-color: var(--accent);
+  background: var(--warn-bg);
+}
+.asset-code {
+  font-size: 1rem;
+  font-weight: 500;
+}
+.asset-poles {
+  font-size: 0.8125rem;
 }

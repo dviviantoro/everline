@@ -8,8 +8,11 @@ import { DiagnosticsScreen, EnterAddressScreen } from '../screens/CantolHelpScre
 import { DeviceScreen } from '../screens/DeviceScreen';
 import { GpsScreen } from '../screens/GpsScreen';
 import { HotspotScreen } from '../screens/HotspotScreen';
+import { LiveScreen } from '../screens/LiveScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
+import { SurveysScreen } from '../screens/SurveysScreen';
+import { TagScreen } from '../screens/TagScreen';
 import { SelfTestScreen } from '../selftest/SelfTestScreen';
 import { useServices } from './services';
 import { useSession } from './session';
@@ -67,6 +70,9 @@ export function AppRoutes() {
       <Route path="/setup/cantol/diagnostics" element={<DiagnosticsScreen />} />
       <Route path="/setup/gps" element={<GpsScreen />} />
       <Route path="/device" element={<DeviceScreen />} />
+      <Route path="/live" element={<LiveScreen />} />
+      <Route path="/tag" element={<TagScreen />} />
+      <Route path="/surveys" element={<SurveysScreen />} />
       {config.extraRoutes.map((route) => (
         <Route key={route.path} path={route.path} element={route.element} />
       ))}
