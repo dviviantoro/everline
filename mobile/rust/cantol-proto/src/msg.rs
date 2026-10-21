@@ -1,6 +1,6 @@
 //! Message payloads carried inside frames, plus the UDP discovery beacon.
 //!
-//! PLACEHOLDER layouts (little-endian), to be agreed with the Red Pitaya side (ADR-005).
+//! PLACEHOLDER layouts (little-endian), to be agreed with the Cantol side (ADR-005).
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MsgError {
@@ -28,7 +28,7 @@ fn u64_at(p: &[u8], i: usize) -> u64 {
     u64::from_le_bytes(b)
 }
 
-/// Phone to RP: first frame on a connection. Also the payload of a "ping".
+/// Phone to Cantol: first frame on a connection. Also the payload of a "ping".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Hello {
     pub proto_min: u8,
@@ -62,14 +62,14 @@ impl Hello {
     }
 }
 
-/// RP to phone: answer to `Hello`, echoing its nonce so the phone can match it and time the RTT.
+/// Cantol to phone: answer to `Hello`, echoing its nonce so the phone can match it and time the RTT.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pong {
     pub proto: u8,
     pub caps: u16,
     pub fw: [u8; 3],
     pub device_id: [u8; 8],
-    pub rp_epoch_ms: u64,
+    pub cantol_epoch_ms: u64,
     pub nonce: u32,
 }
 
@@ -82,7 +82,7 @@ impl Pong {
         b[1..3].copy_from_slice(&self.caps.to_le_bytes());
         b[3..6].copy_from_slice(&self.fw);
         b[6..14].copy_from_slice(&self.device_id);
-        b[14..22].copy_from_slice(&self.rp_epoch_ms.to_le_bytes());
+        b[14..22].copy_from_slice(&self.cantol_epoch_ms.to_le_bytes());
         b[22..26].copy_from_slice(&self.nonce.to_le_bytes());
         b
     }
@@ -100,16 +100,16 @@ impl Pong {
             caps: u16_at(p, 1),
             fw,
             device_id,
-            rp_epoch_ms: u64_at(p, 14),
+            cantol_epoch_ms: u64_at(p, 14),
             nonce: u32_at(p, 22),
         })
     }
 }
 
-/// `Status.flags` bit: the RP is locked to the mains phase (needed for phase-resolved PD).
+/// `Status.flags` bit: Cantol is locked to the mains phase (needed for phase-resolved PD).
 pub const STATUS_MAINS_LOCK: u8 = 0b1;
 
-/// RP to phone, about once per second.
+/// Cantol to phone, about once per second.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Status {
     pub temp_c_x10: i16,
@@ -199,7 +199,7 @@ pub fn decode_pd_events(p: &[u8]) -> Result<Vec<PdEvent>, MsgError> {
         .collect())
 }
 
-/// UDP discovery beacon, broadcast by the RP about once per second. Not a frame.
+/// UDP discovery beacon, broadcast by Cantol about once per second. Not a frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Beacon {
     pub proto: u8,
@@ -260,7 +260,7 @@ mod tests {
             caps: 0b11,
             fw: [0, 1, 2],
             device_id: *b"RP-00A1\0",
-            rp_epoch_ms: 42,
+            cantol_epoch_ms: 42,
             nonce: h.nonce,
         };
         assert_eq!(Pong::decode(&p.encode()), Ok(p));

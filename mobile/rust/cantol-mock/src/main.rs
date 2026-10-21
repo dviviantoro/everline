@@ -5,7 +5,7 @@ use std::time::Duration;
 use cantol_mock::{Config, spawn};
 
 const USAGE: &str = "\
-cantol-mock: simulated Red Pitaya for the Cantol mobile app
+cantol-mock: simulated Cantol device for the Cantol mobile app
 
 usage: cantol-mock [options]
   --bind ADDR             listen address                      (default 0.0.0.0)

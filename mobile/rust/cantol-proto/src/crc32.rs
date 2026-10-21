@@ -53,8 +53,8 @@ mod tests {
 
     #[test]
     fn update_is_incremental() {
-        let whole = crc32(b"hello, red pitaya");
-        let split = crc32_update(crc32(b"hello, "), b"red pitaya");
+        let whole = crc32(b"hello, cantol");
+        let split = crc32_update(crc32(b"hello, "), b"cantol");
         assert_eq!(whole, split);
     }
 }

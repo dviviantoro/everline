@@ -66,7 +66,7 @@ impl<'a> Link<'a> {
             caps: 0b11,
             fw: self.cfg.fw,
             device_id: self.cfg.device_id,
-            rp_epoch_ms: epoch_ms(),
+            cantol_epoch_ms: epoch_ms(),
             nonce: hello.nonce,
         };
         (Kind::Pong, pong.encode().to_vec())

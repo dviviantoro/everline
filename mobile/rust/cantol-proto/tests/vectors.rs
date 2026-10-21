@@ -81,8 +81,11 @@ fn typical(i: u32, rng: &mut Rng) -> (Kind, Vec<u8>) {
                 proto: 1,
                 caps: 0b11,
                 fw: [0, 1, 0],
+                // These bytes are inside the committed clean_10.bin vector. Renaming them
+                // changes the payload CRC and the self-test digest; keep them until the vectors
+                // are deliberately regenerated.
                 device_id: *b"RP-00A1\0",
-                rp_epoch_ms: 5_000,
+                cantol_epoch_ms: 5_000,
                 nonce: 0xC0DE_0001,
             };
             (Kind::Pong, p.encode().to_vec())

@@ -1,4 +1,4 @@
-//! Simulated Red Pitaya: a TCP data link plus a UDP discovery beacon, with fault injection, so
+//! Simulated Cantol device: a TCP data link plus a UDP discovery beacon, with fault injection, so
 //! the app can be built and tested without the real device. It speaks the PLACEHOLDER protocol
 //! in `cantol-proto`; when the real protocol is agreed, update `cantol-proto` and this follows.
 //!

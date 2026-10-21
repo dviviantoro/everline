@@ -1,4 +1,4 @@
-//! End to end over real loopback sockets: what the app's RpLink plugin will do against the mock.
+//! End to end over real loopback sockets: what the app's CantolLink plugin will do against the mock.
 
 use std::io::{Read, Write};
 use std::net::{TcpStream, UdpSocket};
