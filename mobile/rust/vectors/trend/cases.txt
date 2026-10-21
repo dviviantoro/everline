@@ -1,0 +1,76 @@
+# Tracking-mode rules (dev-docs/architecture/mobile-tracking-mode.md section 3).
+# Format:  <rule> <numbers...> = <expected>        (numbers are dBmV, differences are dB)
+# Replayed natively (cargo test), in Node, and inside the Capacitor WebView self-test.
+# Every threshold is an ASSUMPTION flagged in cantol-dsp/src/trend.rs: 1.5, 3, 6 and 3 dB, 3 and 5 samples.
+#
+# window_peak: the highest finite value; non-finite values are skipped.
+window_peak 3 9.5 7 = 9.5
+window_peak -4 -2 -9 = -2
+window_peak 0 = 0
+window_peak nan 5 = 5
+window_peak 5 inf = 5
+window_peak nan inf = none
+window_peak = none
+#
+# level: mean of the last three samples (fewer if that is all there is).
+level 10 = 10
+level 10 20 = 15
+level 10 20 30 = 20
+level 1 2 3 4 = 3
+level 100 1 2 3 = 2
+level = none
+level 1 nan 3 = none
+#
+# live_trend: live level against the mean of the three samples before it; needs six samples.
+# Exactly +1.5 dB is rising and exactly -1.5 dB is falling.
+live_trend 10 10 10 11.5 11.5 11.5 = rising
+live_trend 10 10 10 11.25 11.25 11.25 = steady
+live_trend 11.5 11.5 11.5 10 10 10 = falling
+live_trend 11.5 11.5 11.5 10.25 10.25 10.25 = steady
+live_trend 10 10 10 10 10 10 = steady
+live_trend 0 0 0 20 20 20 = rising
+live_trend 20 20 20 0 0 0 = falling
+live_trend 5 5 5 5 5 = unknown
+live_trend 1 2 3 4 5 6 = rising
+live_trend 5 5 5 5 5 nan = unknown
+#
+# segment: value at one mark against the previous mark. Exactly +3 dB is rising, exactly -3 dB falling.
+segment 10 13 = rising
+segment 10 12.75 = steady
+segment 13 10 = falling
+segment 12.75 10 = steady
+segment 10 10 = steady
+segment 6 40 = rising
+segment 40 6 = falling
+segment nan 10 = unknown
+segment 10 inf = unknown
+#
+# mark: window peak of the last five samples (the dwell at the station).
+mark 1 2 3 4 5 6 7 = 7
+mark 9 1 2 3 4 5 = 5
+mark 2 8 = 8
+mark 4 = 4
+mark 7 1 1 1 1 1 = 1
+mark = none
+#
+# peak: index of the highest mark, the first one on a tie.
+peak 4 9 9 2 = 1
+peak 5 = 0
+peak -3 -1 -2 = 1
+peak 1 2 3 = 2
+peak = none
+#
+# guide: live level against the highest mark so far.
+# More than 6 dB below is go_back (exactly 6 is not); within 3 dB (exactly 3 included) is at_peak.
+guide 40 46 = trend_only
+guide 39.999 46 = go_back
+guide 39.5 46 = go_back
+guide 43 46 = at_peak
+guide 43.001 46 = at_peak
+guide 42.999 46 = trend_only
+guide 42.5 46 = trend_only
+guide 46 46 = at_peak
+guide 50 46 = at_peak
+guide 10 46 = go_back
+guide nan 46 = unknown
+guide 40 inf = unknown

@@ -26,7 +26,11 @@ function loadInput(): VectorInput {
     stream: new Uint8Array(readFileSync(new URL(`${name}.bin`, dir))),
     expected: readFileSync(new URL(`${name}.json`, dir), 'utf8'),
   }));
-  return { decode, classifyText: readFileSync(new URL('classify/cases.txt', vectors), 'utf8') };
+  return {
+    decode,
+    classifyText: readFileSync(new URL('classify/cases.txt', vectors), 'utf8'),
+    trendText: readFileSync(new URL('trend/cases.txt', vectors), 'utf8'),
+  };
 }
 
 describe('golden vectors through the WASM module', () => {
@@ -35,11 +39,30 @@ describe('golden vectors through the WASM module', () => {
     const run = runVectors(wasm, input);
     const failures = run.results.filter((r) => !r.ok);
     expect(failures).toEqual([]);
-    expect(run.results).toHaveLength(input.decode.length + 1);
+    // One row per decode stream, plus classify and trend.
+    expect(run.results).toHaveLength(input.decode.length + 2);
     expect(input.decode.length).toBeGreaterThanOrEqual(9);
     // Printed so it can be compared with the digest the self-test shows on a phone.
     console.info(`vector digest ${run.digest} (${run.wasmVersion})`);
     expect(run.digest).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it('keeps the digest of the decode vectors: adding the trend vectors did not change it', () => {
+    // The digest hashes the decode reports only (like the classify cases, the trend cases are
+    // checked but not hashed). It was f7f47846 before the trend vectors existed.
+    const run = runVectors(wasm, loadInput());
+    expect(run.digest).toBe('f7f47846');
+  });
+
+  it('detects a wrong trend expectation (negative control)', () => {
+    const run = runVectors(wasm, { decode: [], classifyText: '20 warning\n', trendText: 'segment 10 13 = steady\n' });
+    expect(run.failed).toBe(1);
+    expect(run.results.find((r) => r.name === 'trend/cases')?.ok).toBe(false);
+  });
+
+  it('accepts a trend file whose numbers are spelled differently', () => {
+    const run = runVectors(wasm, { decode: [], classifyText: '20 warning\n', trendText: 'window_peak 3 9.50 7 = 9.5\nlevel 10 20 = 15.0\n' });
+    expect(run.failed).toBe(0);
   });
 
   it('detects a wrong expectation (negative control)', () => {

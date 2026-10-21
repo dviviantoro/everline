@@ -30,6 +30,12 @@ const classifyFiles = import.meta.glob<string>('../../rust/vectors/classify/case
   eager: true,
 });
 
+const trendFiles = import.meta.glob<string>('../../rust/vectors/trend/cases.txt', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
 async function loadDecodeCases(): Promise<DecodeCase[]> {
   const entries = Object.entries(streamUrls).sort(([a], [b]) => a.localeCompare(b));
   return Promise.all(
@@ -60,7 +66,8 @@ async function runSelfTest(): Promise<SelfTestMessage> {
 
     const decode = await loadDecodeCases();
     const classifyText = Object.values(classifyFiles)[0] ?? '';
-    const run = runVectors(wasm, { decode, classifyText });
+    const trendText = Object.values(trendFiles)[0] ?? '';
+    const run = runVectors(wasm, { decode, classifyText, trendText });
     const bench = benchDecode(wasm);
     return { ok: true, run, bench, wasmContentType, wasmBytes, worker, elapsedMs: performance.now() - started };
   } catch (error) {

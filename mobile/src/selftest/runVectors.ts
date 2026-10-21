@@ -20,6 +20,13 @@ export interface WasmApi {
   version(): string;
   decode_vector_report(stream: Uint8Array, chunk: number): string;
   classify_dbmv(magnitude: number): number;
+  window_peak_dbmv(values: Float64Array): number;
+  live_level_dbmv(samples: Float64Array): number;
+  live_trend_code(samples: Float64Array): number;
+  segment_trend_code(from: number, to: number): number;
+  mark_value_dbmv(samples: Float64Array): number;
+  peak_index(values: Float64Array): number;
+  guidance_code(live: number, peak: number): number;
   make_bench_stream(frames: number, payloadLen: number): Uint8Array;
   Session: new () => SessionLike;
 }
@@ -45,6 +52,8 @@ export interface VectorInput {
   decode: readonly DecodeCase[];
   /** Contents of vectors/classify/cases.txt. */
   classifyText: string;
+  /** Contents of vectors/trend/cases.txt. Checked like the classify cases and not part of the digest. */
+  trendText?: string;
 }
 
 export interface CaseResult {
@@ -120,6 +129,73 @@ function checkClassify(api: WasmApi, text: string): CaseResult {
   };
 }
 
+const TREND_WORDS: Readonly<Record<number, string>> = { 0: 'steady', 1: 'rising', 2: 'falling', 255: 'unknown' };
+const GUIDANCE_WORDS: Readonly<Record<number, string>> = { 0: 'trend_only', 1: 'at_peak', 2: 'go_back', 255: 'unknown' };
+
+function parseTrendNumber(token: string): number {
+  const lower = token.toLowerCase();
+  if (lower === 'inf') return Number.POSITIVE_INFINITY;
+  if (lower === '-inf') return Number.NEGATIVE_INFINITY;
+  return lower === 'nan' ? Number.NaN : Number(token);
+}
+
+function numberOrNone(value: number): string {
+  return Number.isNaN(value) ? 'none' : String(value);
+}
+
+/** Evaluates one rule of the trend vector file and returns the expected-text form of the result. */
+function evaluateTrend(api: WasmApi, rule: string, args: number[]): string {
+  const series = Float64Array.from(args);
+  switch (rule) {
+    case 'window_peak':
+      return numberOrNone(api.window_peak_dbmv(series));
+    case 'level':
+      return numberOrNone(api.live_level_dbmv(series));
+    case 'mark':
+      return numberOrNone(api.mark_value_dbmv(series));
+    case 'peak': {
+      const index = api.peak_index(series);
+      return index < 0 ? 'none' : String(index);
+    }
+    case 'live_trend':
+      return TREND_WORDS[api.live_trend_code(series)] ?? 'invalid';
+    case 'segment':
+      return TREND_WORDS[api.segment_trend_code(args[0] ?? Number.NaN, args[1] ?? Number.NaN)] ?? 'invalid';
+    case 'guide':
+      return GUIDANCE_WORDS[api.guidance_code(args[0] ?? Number.NaN, args[1] ?? Number.NaN)] ?? 'invalid';
+    default:
+      return `unknown rule ${rule}`;
+  }
+}
+
+/** Two results are equal as text, or as numbers (so "20" and "20.0" agree). */
+function sameResult(got: string, want: string): boolean {
+  if (got === want) return true;
+  const a = Number(got);
+  const b = Number(want);
+  return !Number.isNaN(a) && !Number.isNaN(b) && Math.abs(a - b) <= 1e-9;
+}
+
+function checkTrend(api: WasmApi, text: string): CaseResult {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'));
+  const wrong: string[] = [];
+  for (const line of lines) {
+    const [left = '', want = ''] = line.split('=').map((part) => part.trim());
+    const [rule = '', ...rest] = left.split(/\s+/);
+    const got = evaluateTrend(api, rule, rest.map(parseTrendNumber));
+    if (!sameResult(got, want)) wrong.push(`${line}: got ${got}`);
+  }
+  const ok = wrong.length === 0 && lines.length > 0;
+  return {
+    name: 'trend/cases',
+    ok,
+    detail: ok ? `${String(lines.length)} cases evaluated as committed` : wrong.join('; ') || 'no cases found',
+  };
+}
+
 export function runVectors(api: WasmApi, input: VectorInput): VectorRun {
   const results: CaseResult[] = [];
   const reports: string[] = [];
@@ -129,6 +205,7 @@ export function runVectors(api: WasmApi, input: VectorInput): VectorRun {
     reports.push(checked.report);
   }
   results.push(checkClassify(api, input.classifyText));
+  if (input.trendText !== undefined) results.push(checkTrend(api, input.trendText));
   return {
     wasmVersion: api.version(),
     results,
