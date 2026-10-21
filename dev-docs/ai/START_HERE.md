@@ -14,7 +14,7 @@
 | Git Location | Project root. Remote `origin`, branch `master`. (Older docs say git lives in `apps/` and that `dev` and `main` branches exist; that is no longer true.) |
 | Web | `apps/`: Next.js 16 App Router, React 19, Tailwind 4, react-leaflet, Recharts. Frontend only; every request goes through `apps/lib/api.ts`. Hosted on Vercel (https://everline-pi.vercel.app/). Package manager: npm. |
 | API | `backend/`: Express + TypeScript + raw `pg` + zod. Docker Compose: `postgres:16-alpine`, MinIO (`quay.io/minio/minio`), Caddy (HTTPS). All routes need the shared `X-API-Key` header. Swagger at `/docs`. |
-| Mobile | `mobile/`: Vite 8, React 19, Tailwind 4, Capacitor 8.5 (Android only, minSdk 24, target 36), Rust workspace compiled to WASM and run in a Web Worker. Phase 0 done on the Mac, and the self-test passed on one phone (2026-10-21); the app screens do not exist yet. |
+| Mobile | `mobile/`: Vite 8, React 19, Tailwind 4, Capacitor 8.5 (Android only, minSdk 24, target 36), Rust workspace compiled to WASM and run in a Web Worker. Phase 0 done on the Mac, and the self-test passed on one phone (2026-10-21). All screens are built on simulated sources in the demo build (`npm run build:demo`, TASK-015); the Kotlin plugins and the real upload are not. |
 | Auth | None. `/login` is a UI-only gate; the API key is a shared safeguard, not authentication. |
 | Data | Dummy POC dataset (Pekalongan). Whether real Cantol captures count as real asset data is an open question for the user. |
 | Testing | `apps/` and `backend/`: none automated. `mobile/`: 42 Rust tests and 6 Vitest tests, all passing at last run (2026-10-18). |
@@ -45,7 +45,7 @@
 In this order (details and owners in `TASKS.md`):
 
 1. **TASK-004 (needs the user, not an agent):** the self-test has passed on one phone (2026-10-21); run the hotspot and device-reachability spike on 2 to 3 phones; add `https://localhost` to `CORS_ORIGIN` in the VPS `backend/.env`.
-2. **TASK-005:** app scaffold, sign-in, welcome animation, theme, and the connection wizard (hotspot, Cantol, GPS). The design is ready: `mobile-ui-spec.md`. ADR-006 is Accepted and TASK-010 (the Cantol rename) is done, so use `CantolLink`, `cantolFound` and `CANTOL_*` from the first line.
+2. **TASK-005:** the real Kotlin plugins behind the connection wizard (hotspot, Cantol, GPS). The screens already exist on simulated sources (TASK-015, `mobile/docs/operations/demo-build.md`); the design is `mobile-ui-spec.md`. ADR-006 is Accepted and TASK-010 (the Cantol rename) is done, so use `CantolLink`, `cantolFound` and `CANTOL_*` from the first line.
 3. **Decision gate before TASK-006:** where does pulse detection run (Cantol or phone)? It decides whether WASM and the live phase plot exist.
 4. **TASK-006, TASK-007:** live pipeline; capture, tag and upload (online only).
 5. **TASK-008:** backend ingest hardening (idempotency, transaction, real status codes). Blocks safe offline retry.

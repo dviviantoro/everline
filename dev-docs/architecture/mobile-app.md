@@ -10,7 +10,8 @@
 |---|---|
 | `mobile/rust` workspace (`cantol-proto`, `cantol-dsp`, `cantol-wasm`, `cantol-mock`) and golden vectors | Done, 42 tests |
 | `mobile/` shell with the WASM self-test, debug APK | Done; self-test passes in Chromium and on one phone (Samsung SM-A127F, Android 13, WebView Chrome 155) |
-| Kotlin plugins (`HotspotAssistant`, `CantolLink`, `GnssHelper`), wizard, capture, upload | Not started (TASK-005 onward) |
+| Screens, wizard reducer, guards, local store (Dexie), survey payload, tracking rules (WASM) | Done on simulated sources: the demo build (TASK-015, ADR-007; `mobile/src/core` holds the interfaces, `mobile/src/demo` the simulations) |
+| Kotlin plugins (`HotspotAssistant`, `CantolLink`, `GnssHelper`), real upload and photo | Not started (TASK-005 onward) |
 
 ## How the WASM module is loaded
 
