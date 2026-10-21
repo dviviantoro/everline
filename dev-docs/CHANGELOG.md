@@ -6,6 +6,14 @@
 
 ## [Unreleased] — Current Sprint/Milestone
 
+### Added — mobile UX contract, design reference and handover (2026-10-21, docs only)
+- ADR-006 (Proposed): the device is named Cantol in the UI and, via TASK-010, in code and living docs; the wizard order after sign-in is hotspot, Cantol, GPS (the separate permissions step is folded into the GPS screen); the app surveys line assets only, with "Line | Cable" meaning `line_type` `SUTM | SKTM`; magnitudes are dBmV with the existing provisional zones; fonts and the dark palette are copied from the web app; the light palette is proposed. ADR-002 and ADR-003 are left as written.
+- New architecture files: `mobile-ui-spec.md` (screen to layer to API map, upload sequence, mock-versus-data-model table, design backlog, open questions), `mobile-tracking-mode.md` (stations along a span, trend rules, saving as one survey), `mobile-design-system.md` (fonts, tokens with computed contrast, controls, logo, welcome animation).
+- New `dev-docs/design/mobile/` with a README and the 11-screen visual mock (Login, Splash, Hotspot, Pairing, Location, Connect, Live, TrackSetup, Tracking, Tag, Surveys). Visual reference only; its numbers are samples.
+- Tasks TASK-010 (Cantol rename), TASK-011 (tracking mode), TASK-012 (refresh stale docs), TASK-013 (backend hardening), TASK-014 (second mock pass); TASK-005 to TASK-007 amended to point at the spec.
+- `dev-docs/ai/START_HERE.md` and `FINAL_SYSTEM_HANDOVER.md` rewritten for the three-folder repository (the 2026-09-05 versions described a Next.js + Supabase monolith). The latter now carries the repository review findings and the decisions waiting on the user.
+- No code, schema or API changed. `ai-rules/`, `planning/` and `schema.sql` untouched.
+
 ### Added — `mobile/`: Android field-capture app (Capacitor + Rust/WASM) for Red Pitaya PD data (Phase 0 started)
 - New third code folder `mobile/` (Vite + React + TypeScript + Capacitor 8, with a Rust workspace compiled to WASM). The app brings up a link to a Red Pitaya over the phone's hotspot, receives PD data, tags it with GPS and uploads a PD survey to the existing `POST /api/assets/:id/pd-surveys`. Capture only; the Next.js dashboard is not touched.
 - Design and decisions: `dev-docs/architecture/mobile-app.md`, ADR-002 (scope and stack), ADR-003 (hotspot topology and native-only transport, status Proposed until the Phase 0 spike on real phones). Tasks TASK-004 to TASK-009.

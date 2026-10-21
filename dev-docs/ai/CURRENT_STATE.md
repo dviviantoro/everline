@@ -14,7 +14,7 @@
 
 > Note on the repo layout: the rows above were written for the earlier two-repo layout. Today there is one git repository at the project root (`master`, remote `origin`) containing `apps/`, `backend/`, `mobile/`, `dev-docs/`, `planning/` and `ai-rules/`; the commit hashes in the older rows no longer exist in it.
 
-| Last Updated | 2026-10-18 |
+| Last Updated | 2026-10-21 (docs-only handoff batch on top of `dd95242`; see `FINAL_SYSTEM_HANDOVER.md`) |
 | Updated By | Claude Sonnet 5.5 |
 
 ---
@@ -58,6 +58,7 @@
 | Auth / RBAC | apps + backend | Planned | Still deferred per `planning/PROJECT_BRIEF.md` §5. The backend's `X-API-Key` header is a minimal shared-secret safeguard, explicitly not real auth |
 | Mobile Rust workspace | mobile | Alpha | `cantol-proto` (placeholder Red Pitaya protocol: frame codec, CRC32, resyncing decoder), `cantol-dsp` (severity zones only for now), `cantol-wasm` (27 KB facade), `rp-mock` (simulated Red Pitaya with fault injection). 42 native tests; 9 golden decode vectors plus classification vectors replayed in Node and in Chromium 153 with identical digest `f7f47846`. Not yet verified inside the Capacitor WebView on a phone. |
 | Mobile app shell | mobile | Alpha | Vite + React + Tailwind 4 + Capacitor 8; one screen (WASM self-test). Debug APK builds with JDK 21 (4.2 MB, `allowBackup` off, INTERNET only). No wizard, hotspot handling, GPS or upload yet (TASK-005 to TASK-009). |
+| Mobile UX contract and design mock | mobile + docs | Designed (not built) | 2026-10-21: ADR-006 (Proposed), `mobile-ui-spec.md`, `mobile-tracking-mode.md`, `mobile-design-system.md`, 11-screen mock in `dev-docs/design/mobile/mock/`. The mock was checked against the repo's tokens and fonts but not visually re-checked after the font change, and its numbers are in mV (the real unit is dBmV; see the spec's table). Tasks TASK-010 to TASK-014. |
 
 ---
 
@@ -84,6 +85,7 @@ See `dev-docs/ai/TASKS.md` for the live list.
 
 ## Important Nuance
 
+- **Read this first (2026-10-21):** several bullets in this section were written before the backend split and before the single-repository layout and are superseded: the Supabase and `lib/data/assets.ts` notes, the "git lives in `apps/` and `backend/`" bullet, "Root of this repository is intentionally not a git repository" and "Contradiction found in the framework itself". The current layout is one git repository at the project root (`master`). `FINAL_SYSTEM_HANDOVER.md` is the up-to-date summary; TASK-012 cleans this file properly. Deployment status of the VPS backend is unconfirmed (the Vercel frontend is live).
 - **Pending user action: deploy `backend/` to the real VPS.** Everything backend-related was built and verified against a local Docker Compose stack in the dev sandbox (self-signed `localhost` cert), not the user's actual server. Next steps for them: provision the VPS (Docker + Compose), point DNS at it, fill in `backend/.env` from `.env.example`, `docker compose up -d --build`, `docker compose exec api npm run seed`, then set `NEXT_PUBLIC_API_BASE_URL`/`NEXT_PUBLIC_API_KEY` in the Vercel project. Full steps in `backend/README.md`.
 - Docker Hub's `minio/minio` image now requires a login for anonymous pulls (discovered while testing this round) — `docker-compose.yml` uses `quay.io/minio/minio` instead, MinIO's other official, still-public registry.
 - `planning/architecture.md` is marked immutable and was **not** edited to reflect the backend split — it documents the original Monolith-on-Vercel-with-Supabase decision. This CHANGELOG/CURRENT_STATE pair is the source of truth for what's actually true now; treat `architecture.md` as historical intent, not current state, until/unless the user asks for it to be rewritten.
