@@ -152,6 +152,14 @@ async function walk({ browser, viewport, theme, fontScale, label, reducedMotion 
     }
     await page.waitForTimeout(80);
   };
+  /**
+   * Keeps advancing in 100 ms steps (at most `maxMs`) until `done()` holds. A transition that a
+   * timer starts is rendered a moment later; asserting right after the last timer fired fails at
+   * random when the browser is busy. A transition that never comes still fails after `maxMs`.
+   */
+  const advanceUntil = async (done, maxMs = 2000) => {
+    for (let waited = 0; waited < maxMs && !done(); waited += 100) await advance(100);
+  };
   const go = async (route) => {
     await page.evaluate((r) => {
       window.location.hash = r;
@@ -196,6 +204,7 @@ async function walk({ browser, viewport, theme, fontScale, label, reducedMotion 
     if (capture) await visit('hotspot-off');
     await page.getByRole('button', { name: 'Open hotspot settings' }).click();
     await advance(3500);
+    await advanceUntil(() => hash() === '#/setup/cantol');
     expect(hash() === '#/setup/cantol', `[${label}] the hotspot screen should continue by itself once the hotspot is on, at ${hash()}`);
     if (capture) await visit('cantol-searching');
     await page.getByRole('heading', { name: /connected/i }).waitFor({ timeout: 100 }).catch(() => undefined);
@@ -238,8 +247,16 @@ async function walk({ browser, viewport, theme, fontScale, label, reducedMotion 
   await advance(1200);
   expect(await page.getByText('Signing you in').isVisible(), `[${label}] the welcome animation should play after sign-in, at ${hash()}`);
   await visit('welcome-playing');
-  await advance(1900);
-  expect(await page.getByText('Signed in').isVisible(), `[${label}] the welcome screen should rest on "Signed in" before moving on, at ${hash()}`);
+  // The animation ends at 2900 ms and "Signed in" then rests for 450 ms. The fake clock is not
+  // paused (pausing it stops the simulated hotspot hand-off), so real time leaks into it while the
+  // browser is busy: one big step lands past the 450 ms window on a loaded machine. Step in
+  // 100 ms and stop at the first sight of "Signed in".
+  let rested = false;
+  for (let waited = 0; waited < 4000 && !rested; waited += 100) {
+    rested = await page.getByText('Signed in').isVisible();
+    if (!rested) await advance(100);
+  }
+  expect(rested, `[${label}] the welcome screen should rest on "Signed in" before moving on, at ${hash()}`);
   await visit('welcome-signed-in');
   await advance(1500);
   expect(hash() === '#/setup/hotspot', `[${label}] after the welcome, the first unmet step is the hotspot, at ${hash()}`);
@@ -251,6 +268,7 @@ async function walk({ browser, viewport, theme, fontScale, label, reducedMotion 
 
   await page.getByRole('button', { name: 'Open hotspot settings' }).click();
   await advance(3500);
+  await advanceUntil(() => hash() === '#/setup/cantol');
   expect(hash() === '#/setup/cantol', `[${label}] the hotspot screen should continue by itself, at ${hash()}`);
   await visit('cantol-searching');
 
@@ -296,7 +314,9 @@ async function walk({ browser, viewport, theme, fontScale, label, reducedMotion 
   await advance(600);
   await visit('gps-denied');
   await controls({ gpsPermission: 'denied_permanently' });
-  await button('Enable GPS').click();
+  // The wizard re-checks the permission every 2 s, so the screen may already have moved on to
+  // "Open app settings" before this click. Either order ends in the same blocked state.
+  await button('Enable GPS').click({ timeout: 1500 }).catch(() => undefined);
   await advance(600);
   expect(await button('Open app settings').isVisible(), `[${label}] a blocked permission should offer the app settings`);
   await visit('gps-blocked');
@@ -319,6 +339,7 @@ async function walk({ browser, viewport, theme, fontScale, label, reducedMotion 
   await visit('device-link-lost');
   expect(hash() === '#/device', `[${label}] a link lost for 3 s should recover silently, at ${hash()}`);
   await advance(30000);
+  await advanceUntil(() => hash() === '#/setup/cantol');
   expect(hash() === '#/setup/cantol', `[${label}] after 30 s lost the wizard should reopen at the Cantol step, at ${hash()}`);
   await controls({ linkLost: false });
   await advance(9000);
