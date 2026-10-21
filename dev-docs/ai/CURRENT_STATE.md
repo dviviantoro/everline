@@ -10,7 +10,7 @@
 |------|--------|------------|-------|
 | `apps` | `dev` | `364cf2d` (uncommitted changes on top — several rounds since) | Frontend only as of this round — all server-side DB/API logic removed, everything now goes through `lib/api.ts` to the external backend |
 | `backend` | (new, uncommitted) | — | New separate git repo, Express + Postgres + MinIO + Caddy, Dockerized. Built and verified end-to-end locally in the dev sandbox (not yet deployed to the user's actual VPS) |
-| `mobile` | `master` | `d6e4411` | Android field-capture app (Capacitor 8 + Rust/WASM), Phase 0 in progress: Rust workspace, golden vectors, shell with a WASM self-test, debug APK builds. Not yet run on a phone. See ADR-002/003 and `dev-docs/architecture/mobile-app.md`. |
+| `mobile` | `master` | `d6e4411` | Android field-capture app (Capacitor 8 + Rust/WASM), Phase 0 in progress: Rust workspace, golden vectors, shell with a WASM self-test, debug APK builds. Self-test passed on one phone on 2026-10-21 (Samsung SM-A127F, Android 13, WebView Chrome 155); hotspot and Cantol-reachability spike not done. See ADR-002/003 and `dev-docs/architecture/mobile-app.md`. |
 
 > Note on the repo layout: the rows above were written for the earlier two-repo layout. Today there is one git repository at the project root (`master`, remote `origin`) containing `apps/`, `backend/`, `mobile/`, `dev-docs/`, `planning/` and `ai-rules/`; the commit hashes in the older rows no longer exist in it.
 
@@ -56,7 +56,7 @@
 | Dashboard Sidebar & Nav | apps | Beta | Layer toggles (Transformers/Lines/Poles/PD Measurement), legend, Add Asset, amber-tinted `wire.png` logo, plus Asset Registry/Reports/Settings/Profile/Logout nav items and a light/dark theme toggle |
 | Backend / API Split | backend | Beta | New Express + `pg` + MinIO + Caddy stack in `backend/`, replacing Supabase entirely — see `backend/README.md`. Verified locally end-to-end (build, `docker compose up`, seed, curl smoke tests covering auth/CRUD/import/upload, Swagger docs) via Docker in the dev sandbox. **Not yet deployed to the user's real VPS** — that's the user's next step |
 | Auth / RBAC | apps + backend | Planned | Still deferred per `planning/PROJECT_BRIEF.md` §5. The backend's `X-API-Key` header is a minimal shared-secret safeguard, explicitly not real auth |
-| Mobile Rust workspace | mobile | Alpha | `cantol-proto` (placeholder Cantol protocol: frame codec, CRC32, resyncing decoder), `cantol-dsp` (severity zones only for now), `cantol-wasm` (27 KB facade), `cantol-mock` (simulated Cantol device with fault injection). 42 native tests; 9 golden decode vectors plus classification vectors replayed in Node and in Chromium 153 with identical digest `f7f47846`. Not yet verified inside the Capacitor WebView on a phone. |
+| Mobile Rust workspace | mobile | Alpha | `cantol-proto` (placeholder Cantol protocol: frame codec, CRC32, resyncing decoder), `cantol-dsp` (severity zones only for now), `cantol-wasm` (27 KB facade), `cantol-mock` (simulated Cantol device with fault injection). 42 native tests; 9 golden decode vectors plus classification vectors replayed in Node and in Chromium 153 with identical digest `f7f47846`. Also verified inside the Capacitor WebView on one phone (2026-10-21), same digest. |
 | Mobile app shell | mobile | Alpha | Vite + React + Tailwind 4 + Capacitor 8; one screen (WASM self-test). Debug APK builds with JDK 21 (4.2 MB, `allowBackup` off, INTERNET only). No wizard, hotspot handling, GPS or upload yet (TASK-005 to TASK-009). |
 | Mobile UX contract and design mock | mobile + docs | Designed (not built) | 2026-10-21: ADR-006 (Accepted 2026-10-21; TASK-010 Cantol rename done), `mobile-ui-spec.md`, `mobile-tracking-mode.md`, `mobile-design-system.md`, 11-screen mock in `dev-docs/design/mobile/mock/`. The mock was checked against the repo's tokens and fonts but not visually re-checked after the font change, and its numbers are in mV (the real unit is dBmV; see the spec's table). Tasks TASK-010 to TASK-014. |
 
@@ -79,7 +79,8 @@ See `dev-docs/ai/TASKS.md` for the live list.
 | `mobile` | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace` | 42 tests: protocol codec, decoder, golden vectors (9 streams x 11 chunkings), severity, Cantol mock end-to-end over loopback sockets | Passing (2026-10-21, after the TASK-010 rename) |
 | `mobile` | `npm run typecheck`, `npm run lint`, `npm test` (Vitest) | 6 tests: vectors through the real WASM in Node, negative controls, throughput, FNV-1a | Passing (2026-10-18) |
 | `mobile` | `npm run build`, `scripts/android-build.sh` | production bundle 292 KB; debug APK 4.2 MB | Passing (2026-10-18) |
-| `mobile` | self-test in a real browser | headless Chromium 153: PASS, 0.32 ms per 64 KiB, `.wasm` served as `application/wasm` | Passing (2026-10-18). **Not yet run in an Android WebView.** |
+| `mobile` | self-test in a real browser | headless Chromium 153: PASS, 0.32 ms per 64 KiB, `.wasm` served as `application/wasm` | Passing (2026-10-18) |
+| `mobile` | self-test in the Android WebView (Capacitor, origin `https://localhost`) | Samsung SM-A127F, Android 13, WebView Chrome 155: PASS, digest `f7f47846`, 0.839 ms per 64 KiB (budget 2 ms), `.wasm` served as `application/wasm` | Passing (2026-10-21). One phone and one Android version only. |
 
 ---
 

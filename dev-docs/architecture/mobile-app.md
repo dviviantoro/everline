@@ -1,6 +1,6 @@
 # Mobile app architecture (`mobile/`)
 
-> Status: design, Phase 0 in progress (Mac side done 2026-10-18; on-phone checks pending). Decisions: ADR-002 (scope and stack), ADR-003 (hotspot and transport). This file is the repo-resident design; update it when the design changes.
+> Status: design, Phase 0 in progress (Mac side done 2026-10-18; self-test passed on one phone 2026-10-21; hotspot and Cantol-reachability spike pending). Decisions: ADR-002 (scope and stack), ADR-003 (hotspot and transport). This file is the repo-resident design; update it when the design changes.
 >
 > Amended by ADR-006 (Accepted, 2026-10-21): the device is called **Cantol**. TASK-010 renamed the code and this file to match (`cantol-mock`, `CantolLink`, `cantolFound`, `CANTOL_*`); ADR-002 and ADR-003 keep the older names "Red Pitaya", "RP", `RpLink`, `rp-mock` and `RP_*` as history. The wizard order is hotspot, Cantol, GPS with the location permission requested on the GPS step (the separate `PERMS` state is folded into `LOCATION` when TASK-005 builds the wizard; the state list below still shows it). What each screen shows and sends is in `mobile-ui-spec.md`; tracking mode is `mobile-tracking-mode.md`; fonts and colours are `mobile-design-system.md`.
 
@@ -9,7 +9,7 @@
 | Piece | State |
 |---|---|
 | `mobile/rust` workspace (`cantol-proto`, `cantol-dsp`, `cantol-wasm`, `cantol-mock`) and golden vectors | Done, 42 tests |
-| `mobile/` shell with the WASM self-test, debug APK | Done; self-test passes in Chromium, not yet run on a phone |
+| `mobile/` shell with the WASM self-test, debug APK | Done; self-test passes in Chromium and on one phone (Samsung SM-A127F, Android 13, WebView Chrome 155) |
 | Kotlin plugins (`HotspotAssistant`, `CantolLink`, `GnssHelper`), wizard, capture, upload | Not started (TASK-005 onward) |
 
 ## How the WASM module is loaded
