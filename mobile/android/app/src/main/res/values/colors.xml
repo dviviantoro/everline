@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The app's dark background (--bg in mobile-design-system.md): launch screen and system bars. -->
+    <!-- The app's dark background (the dark background token in mobile-design-system.md): launch screen and system bars. -->
     <color name="splash_background">#0A0D10</color>
 </resources>

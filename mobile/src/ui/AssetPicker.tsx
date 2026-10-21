@@ -44,7 +44,7 @@ export function AssetPicker({ assets, onRetry, fix, kind, onKind, query, onQuery
           className="input input-mono"
           type="search"
           autoComplete="off"
-          placeholder="Search, for example SUTM-PKL-02"
+          placeholder="Search by code"
           value={query}
           onChange={(event) => {
             onQuery(event.target.value);
