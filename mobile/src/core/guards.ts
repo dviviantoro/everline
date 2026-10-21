@@ -2,7 +2,7 @@
  * Route guards and Android back-button rules (`mobile-ui-spec.md` section 2), as pure functions
  * so they can be tested without a router.
  *
- * Guards, in order: no operator then /login; wizard not at READY then the first unmet /setup/*
+ * Guards, in order: no operator then /login (which stays open once signed in); wizard not at READY then the first unmet /setup/*
  * step (earlier setup steps stay viewable); a lost link for more than 30 s is already folded into
  * the wizard step by the reducer. /tag works from a recording already in the store, so it needs
  * the operator but not a live wizard. /surveys needs only the operator.
@@ -46,7 +46,10 @@ export function guardRedirect(path: string, ctx: GuardContext): string | null {
 
   if (ctx.operator === null) return normalised === '/login' ? null : '/login';
 
-  if (normalised === '/login') return routeForStep(ctx.step);
+  // /login stays open when signed in: signing in sets the operator before the Login screen has
+  // moved on to /welcome, so redirecting here would skip the welcome animation. It is also how an
+  // operator is switched.
+  if (normalised === '/login') return null;
   if (normalised === '/') return routeForStep(ctx.step);
 
   const setup = setupIndex(normalised);

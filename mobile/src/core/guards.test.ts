@@ -19,10 +19,13 @@ describe('guard 1: no operator means /login', () => {
     expect(guardRedirect('/selftest', signedIn('READY'))).toBeNull();
   });
 
-  it('skips /login once signed in and goes to the first unmet step', () => {
-    expect(guardRedirect('/login', signedIn('CANTOL_DISCOVER'))).toBe('/setup/cantol');
+  it('starts at the first unmet step when signed in, and leaves /login open', () => {
+    expect(guardRedirect('/', signedIn('CANTOL_DISCOVER'))).toBe('/setup/cantol');
     expect(guardRedirect('/', signedIn('LOCATION'))).toBe('/setup/gps');
     expect(guardRedirect('/', signedIn('READY'))).toBe('/device');
+    // Signing in sets the operator before the Login screen moves on to /welcome; redirecting
+    // /login here would skip the welcome animation.
+    expect(guardRedirect('/login', signedIn('HOTSPOT_CHECK'))).toBeNull();
   });
 });
 

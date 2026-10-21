@@ -1,6 +1,6 @@
 # Mobile UI contract (`mobile/`)
 
-> Status: accepted design input, implementation not started (Phase 0 foundations exist; the wizard and everything after it are TASK-005 onward). Decision record: ADR-006. Visual reference: `dev-docs/design/mobile/mock/*.dc.html`. Technical design of the layers: `dev-docs/architecture/mobile-app.md`. Companion files: `mobile-tracking-mode.md`, `mobile-design-system.md`.
+> Status: accepted design input. The screens are built and run on simulated sources in the demo build (TASK-015, ADR-007; see the Status column in section 2); what remains is the real implementations behind the same interfaces (TASK-005 to TASK-007, TASK-009, TASK-011). Decision record: ADR-006. Visual reference: `dev-docs/design/mobile/mock/*.dc.html`. Technical design of the layers: `dev-docs/architecture/mobile-app.md`. Companion files: `mobile-tracking-mode.md`, `mobile-design-system.md`.
 >
 > The mock shows what each screen looks like. This file says what each screen means in the real system: which API field, which wizard state, which native plugin. Where the two disagree, this file wins (see "Mock versus data model").
 
@@ -25,23 +25,23 @@
 
 Wizard states are the ones in `mobile-app.md`, with two amendments recorded in ADR-006: the `RP_*` states of ADR-003 became `CANTOL_*` (renamed by TASK-010), and the separate `PERMS` state is folded into `LOCATION` (the location permission is requested on the GPS screen, which gives the order the product asked for: hotspot, then Cantol, then GPS).
 
-| # | Mock file | Route | Wizard state | Built in | Reads | Writes |
-|---|---|---|---|---|---|---|
-| 1 | `Login.dc.html` | `/login` | none | TASK-005 | none | local operator name |
-| 1b | `Splash.dc.html` | `/welcome` | none | TASK-005 | none | none |
-| 2 | `Hotspot.dc.html` | `/setup/hotspot` | `HOTSPOT_CHECK`, `HOTSPOT_GUIDE` | TASK-005 | `HotspotAssistant` (capabilities, hotspot on/off) | none |
-| 3 | `Pairing.dc.html` | `/setup/cantol` | `CANTOL_DISCOVER`, `CANTOL_PING` | TASK-005 | `CantolLink` (found, HELLO/PONG, RTT) | none |
-| 4 | `Location.dc.html` | `/setup/gps` | `LOCATION` | TASK-005 | `GnssHelper`, `@capacitor/geolocation` | none |
-| 5 | `Connect.dc.html` | `/device` | `STREAMING`, `READY` | TASK-005 | all of the above | none |
-| 6 | `Live.dc.html` | `/live` | `READY` | TASK-006 | `cantol-wasm` Session (events, summary) | none |
-| 6b | `TrackSetup.dc.html` | `/track/setup` | `READY` | TASK-011 | `GET /api/assets?type=line`, `GET /api/assets/{id}/measurement-points` | none |
-| 6c | `Tracking.dc.html` | `/track` | `READY` | TASK-011 | live Session, GPS | local session |
-| 7 | `Tag.dc.html` | `/tag` | `READY` | TASK-007 | assets, measurement points, GPS | Dexie, then `POST /api/uploads`, `POST /api/assets/{id}/pd-surveys` |
-| 8 | `Surveys.dc.html` | `/surveys` | none | TASK-007 (list), TASK-009 (queue states) | Dexie | retry upload |
+| # | Mock file | Route | Wizard state | Built in | Reads | Writes | Status |
+|---|---|---|---|---|---|---|---|
+| 1 | `Login.dc.html` | `/login` | none | TASK-005 | none | local operator name | Built (TASK-015). A UI-only gate; "Skip sign-in" and the note come from the build's config and are demo only. |
+| 1b | `Splash.dc.html` | `/welcome` | none | TASK-005 | none | none | Built (TASK-015). Reduced motion handled; advances after the animation and initialisation. |
+| 2 | `Hotspot.dc.html` | `/setup/hotspot` | `HOTSPOT_CHECK`, `HOTSPOT_GUIDE` | TASK-005 | `HotspotAssistant` (capabilities, hotspot on/off) | none | Built on a simulated `HotspotAssistant`. Real plugin, intent table and device profile remain (TASK-005). |
+| 3 | `Pairing.dc.html` | `/setup/cantol` | `CANTOL_DISCOVER`, `CANTOL_PING` | TASK-005 | `CantolLink` (found, HELLO/PONG, RTT) | none | Built with the 60 s help card, manual address and diagnostics, on a simulated `CantolLink`. Real discovery and handshake remain (TASK-005, ADR-005). |
+| 4 | `Location.dc.html` | `/setup/gps` | `LOCATION` | TASK-005 | `GnssHelper`, `@capacitor/geolocation` | none | Built with denied, blocked, services-off and poor-fix states, on a simulated `Gnss`. Real permission, dialog and fixes remain (TASK-005). |
+| 5 | `Connect.dc.html` | `/device` | `STREAMING`, `READY` | TASK-005 | all of the above | none | Built (TASK-015). Rows turn into warnings during the 30 s recovery. |
+| 6 | `Live.dc.html` | `/live` | `READY` | TASK-006 | `cantol-wasm` Session (events, summary) | none | Built on simulated pulses with the real fields. The live pipeline and the decision on where detection runs remain (TASK-006). |
+| 6b | `TrackSetup.dc.html` | `/track/setup` | `READY` | TASK-011 | `GET /api/assets?type=line`, `GET /api/assets/{id}/measurement-points` | none | Built (TASK-015), with resume of an unfinished walk. Field-tested thresholds remain (TASK-011). |
+| 6c | `Tracking.dc.html` | `/track` | `READY` | TASK-011 | live Session, GPS | local session | Built; rules in `cantol-dsp` with golden vectors, on simulated sources. Field-tested thresholds remain (TASK-011). |
+| 7 | `Tag.dc.html` | `/tag` | `READY` | TASK-007 | assets, measurement points, GPS | Dexie, then `POST /api/uploads`, `POST /api/assets/{id}/pd-surveys` | Built on a simulated `SurveyApi`, except the photo (`TODO(TASK-007)`). The real upload and CORS remain (TASK-007, TASK-008). |
+| 8 | `Surveys.dc.html` | `/surveys` | none | TASK-007 (list), TASK-009 (queue states) | Dexie | retry upload | Built: Saved, Uploaded, Failed with Retry. The sync queue banner remains (TASK-009). |
 
 Bottom navigation (Device, Live, Surveys) shows on `/device`, `/live` and `/surveys` only.
 
-Guards, in order: no operator name stored then `/login`; wizard not at `READY` then the first unmet `/setup/*` step (every step is idempotent and all checks run in parallel on start and on app resume); link lost for more than 30 s on `/live` or `/track` then return to the wizard (the first 30 s recover silently, as in `mobile-app.md`). Android back button: on `/track` ask before leaving; on `/device` exit the app; elsewhere navigate back.
+Guards, in order: no operator name stored then `/login`; wizard not at `READY` then the first unmet `/setup/*` step (every step is idempotent and all checks run in parallel on start and on app resume); link lost for more than 30 s on `/live` or `/track` then return to the wizard (the first 30 s recover silently, as in `mobile-app.md`). Android back button: on `/track` ask before leaving; on `/device` exit the app; elsewhere go to the parent screen of the flow (`parentRoute` in `mobile/src/core/guards.ts`; the wizard replaces history entries, so the browser history is not used). Built in TASK-015: `/tag` and `/surveys` need only the operator, because a recording or a finished walk is already in the local store and must not be lost when the link drops; `/device`, `/live` and `/track*` need the wizard at READY.
 
 ---
 
