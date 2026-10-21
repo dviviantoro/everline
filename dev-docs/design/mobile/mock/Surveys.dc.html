@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Surveys</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.app{--bg:#0A0D10;--surface:#12161B;--surface2:#171C22;--border:#232A32;--border2:#323C47;--text:#E8ECF1;--muted:#7C8A97;--accent:#F5A623;--accent-text:#F5A623;--on-accent:#0A0D10;--cyan:#22D3EE;--cyan-text:#22D3EE;--ok:#22C55E;--ok-text:#5FE0A0;--ok-bg:#0F2A1D;--warn-text:#F7B955;--warn-bg:#2B1F0A;--crit:#EF4444;--crit-text:#FF8A8A;--crit-bg:#2D1215;--grid:#141A21;--chart:#22D3EE}
+.app.light{--bg:#F2F4F6;--surface:#FFFFFF;--surface2:#EBEEF2;--border:#DCE1E7;--border2:#B4BDC8;--text:#0D1319;--muted:#56616D;--accent:#F5A623;--accent-text:#A85800;--on-accent:#0A0D10;--cyan:#0E8CA6;--cyan-text:#00758C;--ok:#16A45B;--ok-text:#0F6B3C;--ok-bg:#E0F4E9;--warn-text:#8A4B00;--warn-bg:#FDEED2;--crit:#D93636;--crit-text:#A8242A;--crit-bg:#FCE4E3;--grid:#E4E8ED;--chart:#0A86A0}
+.app a:focus-visible,.app button:focus-visible{outline:2px solid var(--cyan-text);outline-offset:-2px}
+</style>
+</helmet>
+<div class="app {{themeClass}}" style="width:390px;height:844px;box-sizing:border-box;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',system-ui,sans-serif;display:flex;flex-direction:column">
+
+  <div style="padding:8px 20px 0;display:flex;align-items:center;justify-content:space-between;min-height:44px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <sc-if value="{{isDark}}" hint-placeholder-val="{{true}}"><img src="/_blob/5533abcdbf07e714ec7995a3bffa1148" alt="" width="26" height="26" style="display:block"></sc-if>
+      <sc-if value="{{isLight}}" hint-placeholder-val="{{false}}"><img src="/_blob/4622e4e811f6e6c0f8e284f97361f121" alt="" width="26" height="26" style="display:block"></sc-if>
+      <span style="font-family:'Big Shoulders',sans-serif;font-size:26px;font-weight:700;letter-spacing:-0.01em">EverLine</span>
+    </div>
+    <button type="button" onClick="{{toggle}}" aria-label="{{toggleLabel}}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border2);border-radius:999px;background:transparent;color:var(--text);cursor:pointer;padding:0">
+      <sc-if value="{{isDark}}" hint-placeholder-val="{{true}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></sc-if>
+      <sc-if value="{{isLight}}" hint-placeholder-val="{{false}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></sc-if>
+    </button>
+  </div>
+
+  <h1 style="margin:14px 20px 0;font-family:'Big Shoulders',sans-serif;font-size:44px;line-height:0.95;font-weight:900;letter-spacing:-0.01em;text-transform:uppercase">Every reading, <span style="color:var(--accent-text)">on record.</span></h1>
+
+  <div style="flex:1;padding:16px 20px 0;display:flex;flex-direction:column;gap:12px">
+    <section style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--warn-bg);border:1px solid var(--accent);border-radius:8px;padding:12px 12px 12px 16px">
+      <div>
+        <div style="font-size:15px;font-weight:600;color:var(--warn-text)">2 waiting to sync</div>
+        <div style="margin-top:2px;font-size:13px;color:var(--warn-text)">Phone is online</div>
+      </div>
+      <button type="button" style="min-height:44px;padding:0 18px;border:0;border-radius:6px;background:var(--accent);color:var(--on-accent);font:inherit;font-size:15px;font-weight:600;cursor:pointer">Sync now</button>
+    </section>
+
+    <article style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:500">CB-0142</div>
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--warn-bg);color:var(--warn-text);font-size:13px;font-weight:600"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span>Warning</span>
+      </div>
+      <div style="font-size:14px;color:var(--muted)">Cable &middot; Today 20:12 &middot; peak 182 mV</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--warn-text)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        Waiting to sync
+      </div>
+    </article>
+
+    <article style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:500">LN-0087</div>
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--ok-bg);color:var(--ok-text);font-size:13px;font-weight:600"><span style="width:8px;height:8px;border-radius:50%;background:var(--ok)"></span>Normal</span>
+      </div>
+      <div style="font-size:14px;color:var(--muted)">Line &middot; Today 18:40 &middot; peak 36 mV</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ok-text)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        Synced
+      </div>
+    </article>
+
+    <article style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:500">CB-0131</div>
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--crit-bg);color:var(--crit-text);font-size:13px;font-weight:600"><span style="width:8px;height:8px;border-radius:50%;background:var(--crit)"></span>Critical</span>
+      </div>
+      <div style="font-size:14px;color:var(--muted)">Cable &middot; Yesterday 15:05 &middot; peak 410 mV</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ok-text)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        Synced
+      </div>
+    </article>
+
+    <article style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:500">LN-0092</div>
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--warn-bg);color:var(--warn-text);font-size:13px;font-weight:600"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span>Warning</span>
+      </div>
+      <div style="font-size:14px;color:var(--muted)">Line &middot; Tracking &middot; Yesterday 13:30 &middot; peak 182 mV at 90 m</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--warn-text)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        Waiting to sync
+      </div>
+    </article>
+  </div>
+
+  <nav aria-label="Main" style="margin-top:16px;height:72px;box-sizing:border-box;background:var(--surface);border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(3, minmax(0, 1fr))">
+    <a href="Connect.dc.html" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:var(--muted);font-size:12px;font-weight:500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0"/><path d="M5.5 12.5a10 10 0 0 1 13 0"/><path d="M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1"/></svg>
+      Device
+    </a>
+    <a href="Live.dc.html" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:var(--muted);font-size:12px;font-weight:500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+      Live
+    </a>
+    <a href="Surveys.dc.html" aria-current="page" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;box-shadow:inset 0 2px 0 var(--accent);text-decoration:none;color:var(--accent-text);font-size:12px;font-weight:600">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+      Surveys
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+state = { themeMode: null };
+componentDidMount() {
+let saved = null;
+try { saved = window.localStorage.getItem('everline-theme'); } catch (e) {}
+if (saved === 'light' || saved === 'dark') this.setState({ themeMode: saved });
+this._onStorage = (ev) => { if (ev.key === 'everline-theme' && (ev.newValue === 'light' || ev.newValue === 'dark')) this.setState({ themeMode: ev.newValue }); };
+try { window.addEventListener('storage', this._onStorage); } catch (e) {}
+}
+componentWillUnmount() {
+try { window.removeEventListener('storage', this._onStorage); } catch (e) {}
+}
+renderVals() {
+const mode = this.state.themeMode || this.props.theme || 'dark';
+const dark = mode !== 'light';
+return {
+themeClass: dark ? 'dark' : 'light',
+isDark: dark,
+isLight: !dark,
+toggleLabel: dark ? 'Switch to light mode' : 'Switch to dark mode',
+toggle: () => {
+const next = dark ? 'light' : 'dark';
+this.setState({ themeMode: next });
+try { window.localStorage.setItem('everline-theme', next); } catch (e) {}
+}
+};
+}
+}
+</script>
+</body>
+</html>

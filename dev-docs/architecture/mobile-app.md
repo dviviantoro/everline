@@ -1,6 +1,8 @@
 # Mobile app architecture (`mobile/`)
 
 > Status: design, Phase 0 in progress (Mac side done 2026-10-18; on-phone checks pending). Decisions: ADR-002 (scope and stack), ADR-003 (hotspot and transport). This file is the repo-resident design; update it when the design changes.
+>
+> Amended by ADR-006 (Proposed, 2026-10-21): the device is called **Cantol** (read "Red Pitaya", "RP", `RpLink`, `rp-mock` and `RP_*` below as Cantol, `CantolLink`, `cantol-mock` and `CANTOL_*`; the code rename is TASK-010), and the wizard order is hotspot, Cantol, GPS with the location permission requested on the GPS step (the separate `PERMS` state is folded into `LOCATION`). What each screen shows and sends is in `mobile-ui-spec.md`; tracking mode is `mobile-tracking-mode.md`; fonts and colours are `mobile-design-system.md`.
 
 ## Built so far
 

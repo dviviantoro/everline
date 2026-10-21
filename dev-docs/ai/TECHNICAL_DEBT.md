@@ -17,6 +17,11 @@
 | P3 | mobile | 3 moderate `npm audit` advisories, dev tooling only: `@capacitor/cli` -> `xcode` -> `uuid` below 11.1.1 (missing buffer bounds check in v3/v5/v6 when a caller-provided buffer is used) | `npm audit` in `mobile/`; `npm audit --omit=dev` reports 0 | `npm audit fix --force` would downgrade `@capacitor/cli` to 8.4.3 (a breaking change), and the path only touches iOS project tooling. Do not force; re-check on each Capacitor release. |
 | P3 | mobile | The Red Pitaya link protocol is a placeholder, and a corrupted but plausible `len` field stalls the decoder until up to 64 KiB more bytes arrive (then the CRC fails and it resyncs) | `mobile/rust/cantol-proto/src/frame.rs` | When the protocol is agreed (ADR-005), add a header checksum or lower `MAX_PAYLOAD`. No data is lost meanwhile, only delayed. |
 | P3 | mobile | Capacitor's template example tests use the package `com.getcapacitor.myapp`, not the app id | `mobile/android/app/src/test`, `.../androidTest` | Harmless. Rename or delete when real Android tests are added. |
+| P2 | backend | No security headers, no rate limiting, no upload MIME allow-list (see KNOWN_ISSUES 5) | `backend/src/app.ts`, `routes/uploads.ts`, `storage.ts` | TASK-013. |
+| P3 | repo | No root `.gitignore`; each code folder has its own, so a secret file created at the project root is not ignored | `ls -a` at the root | Add a root `.gitignore` covering `.env*`, `*.local.json`, keystores and OS files. Needs a normal small batch. |
+| P3 | mobile | The mobile design tokens are copied from `apps/app/globals.css` (no shared package, per ADR-002) | `mobile/src/index.css` once it exists, `mobile-design-system.md` | When the web palette changes, update both and the table in `mobile-design-system.md`. |
+| P3 | mobile | Control borders (`--border2`) are about 1.7:1 (dark) and 1.9:1 (light) against the page, under the 3:1 guideline for non-text boundaries; inputs have a filled background that carries most of the affordance | `mobile-design-system.md` section 2 | Check in sunlight on a phone during TASK-005; raise the token if needed. |
+| P3 | repo | Tracking walks are indistinguishable from spot surveys on the dashboard (only free text in `notes`) | `mobile-tracking-mode.md` section 5 | A `mode` field needs a schema change and explicit approval; decide only if the product wants to filter by it. |
 
 ---
 
