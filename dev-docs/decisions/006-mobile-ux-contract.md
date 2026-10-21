@@ -4,7 +4,7 @@
 
 ## Status
 
-Proposed — 2026-10-21. To be Accepted by the user after reviewing `dev-docs/design/mobile/mock/` and the open questions listed in `dev-docs/architecture/mobile-ui-spec.md` section 7. Nothing in `mobile/` depends on it until TASK-005 starts.
+Accepted — 2026-10-21 (user reviewed it and accepted it as written).
 
 ---
 

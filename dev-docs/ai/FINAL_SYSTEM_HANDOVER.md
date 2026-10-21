@@ -23,7 +23,7 @@ Three code folders share one git repository.
 
 - **`apps/`, web dashboard (frontend only).** Next.js 16 App Router, React 19, Tailwind 4, react-leaflet map, Recharts. Landing, UI-only `/login`, `/dashboard` map with asset detail and history, forms for transformer and line PD surveys, Asset Registry, CSV import and export, light/dark theme. It has no database access: every request goes through `apps/lib/api.ts`, which reads `NEXT_PUBLIC_API_BASE_URL` and attaches `X-API-Key`. Live on Vercel at https://everline-pi.vercel.app/.
 - **`backend/`, API.** Express + TypeScript + raw `pg` + zod, one near-1:1 port of the former Next.js routes. Docker Compose runs `postgres:16-alpine` (schema auto-applied from `db/init.sql` on first boot), MinIO (S3-compatible, PD photo evidence, public-read bucket `pd-photos`) and Caddy (automatic HTTPS). Every route needs the shared `X-API-Key`. CORS is an allow-list in `CORS_ORIGIN`. Swagger UI at `/docs`. `backend/README.md` has the VPS install.
-- **`mobile/`, Android field-capture app (Phase 0 only).** Vite 8, React 19, Tailwind 4, Capacitor 8.5 (minSdk 24, target 36, INTERNET only, `allowBackup` off, no cleartext). A Rust workspace (`cantol-proto`, `cantol-dsp`, `cantol-wasm`, `rp-mock`) compiles to a 27 KB WASM module that runs in a Web Worker. The app currently has one screen, a WASM self-test. Designed but not built: connection wizard, live pipeline, tracking mode, tagging and upload, offline queue. See ADR-002, ADR-003, ADR-006 and the `mobile-*` architecture files.
+- **`mobile/`, Android field-capture app (Phase 0 only).** Vite 8, React 19, Tailwind 4, Capacitor 8.5 (minSdk 24, target 36, INTERNET only, `allowBackup` off, no cleartext). A Rust workspace (`cantol-proto`, `cantol-dsp`, `cantol-wasm`, `cantol-mock`) compiles to a 27 KB WASM module that runs in a Web Worker. The app currently has one screen, a WASM self-test. Designed but not built: connection wizard, live pipeline, tracking mode, tagging and upload, offline queue. See ADR-002, ADR-003, ADR-006 and the `mobile-*` architecture files.
 
 Data model (authoritative: `planning/schema.sql`, `backend/src/types.ts`):
 
@@ -67,6 +67,7 @@ The previous handover was written 2026-09-05. Full detail: `dev-docs/CHANGELOG.m
 | Sep to Oct 2026 | apps + backend | refactor | Architecture split: Supabase and Next.js API routes replaced by `backend/` on a VPS; Vercel keeps the frontend | Supersedes `planning/architecture.md`; recorded in the CHANGELOG |
 | 2026-10-18 | mobile | feat | Mobile Phase 0: ADR-002, ADR-003, Rust workspace, Capacitor shell, WASM self-test, APK build scripts | Third code folder; supersedes three non-goals in `planning/PROJECT_BRIEF.md` section 4 |
 | 2026-10-21 | docs | docs | Mobile UX contract: ADR-006 (Proposed), UI spec, tracking mode, design system, design mock, tasks TASK-010 to TASK-014, this handover | No code changed. Defines what TASK-005 to TASK-011 build |
+| 2026-10-21 | mobile + docs | refactor | TASK-010: ADR-006 Accepted; Red Pitaya and RP renamed to Cantol in code and living docs (`rp-mock` is now `cantol-mock`). Branch `feat/task-010-cantol-rename` | No behaviour change; digest `f7f47846` unchanged. Device-id strings `RP-00A1`, `RP-MOCK`, `RP-01` kept on purpose |
 
 ---
 
@@ -108,7 +109,7 @@ See `dev-docs/ai/KNOWN_ISSUES.md` for the live list (items 1 to 4 plus the addit
 
 | # | Decision | Needed by | Detail |
 |---|----------|-----------|--------|
-| 1 | Accept ADR-006 (Cantol naming, wizard order, line-only scope, tracking mode, tokens) | Before TASK-010 and TASK-005 | `dev-docs/decisions/006-mobile-ux-contract.md` |
+| 1 | ADR-006 (Cantol naming, wizard order, line-only scope, tracking mode, tokens) | Resolved: Accepted 2026-10-21 | `dev-docs/decisions/006-mobile-ux-contract.md` |
 | 2 | Where does pulse detection run, Cantol or the phone? | Before TASK-006 | Decides whether WASM and the live phase plot exist |
 | 3 | Which statistic is `pd_magnitude` for a recorded window: peak, 95th percentile or other? | Before TASK-007 | Must match what the dashboard's history and aging-rate assume |
 | 4 | Approve the mobile light palette | TASK-005 | Proposed in `mobile-design-system.md` |
@@ -126,8 +127,7 @@ See `dev-docs/ai/KNOWN_ISSUES.md` for the live list (items 1 to 4 plus the addit
 | Priority | Repo | Task | Blockers |
 |----------|------|------|----------|
 | P1 | mobile | TASK-004: phone self-test, hotspot and Cantol reachability spike, CORS on the VPS | A phone with USB debugging; the user |
-| P1 | mobile + docs | TASK-010: rename Red Pitaya/RP to Cantol in code and living docs | ADR-006 accepted |
-| P1 | mobile | TASK-005: scaffold, sign-in, welcome, theme, wizard | TASK-010; spike results for ADR-003 |
+| P1 | mobile | TASK-005: scaffold, sign-in, welcome, theme, wizard | Spike results for ADR-003; open decisions 4, 5, 8 |
 | P1 | mobile | TASK-006, TASK-007: live pipeline; capture, tag, upload | Decision gate; CORS; open questions 2, 3, 6 |
 | P2 | backend | TASK-008: ingest hardening (ADR-004, migration 005) | Explicit approval to sync `planning/schema.sql` |
 | P2 | mobile | TASK-011: tracking mode | TASK-006 and TASK-007 |
@@ -168,14 +168,14 @@ npm run typecheck && npm run lint && npm test
 scripts/android-build.sh                # debug APK; add "install" to push to a connected phone
 ```
 
-Expected at last run (2026-10-18): 42 Rust tests, 6 Vitest tests, APK about 4.2 MB, self-test digest `f7f47846`.
+Expected at last run (2026-10-21, after TASK-010, on Linux aarch64 with `CANTOL_JAVA_HOME` and `CANTOL_ANDROID_HOME` set because `env.sh` defaults to the Mac's Homebrew paths): 42 Rust tests, 6 Vitest tests, APK 4,228,428 bytes (about 4.2 MB), self-test digest `f7f47846`.
 
 ---
 
 ## First Hour Checklist for the Next Agent
 
 - ✅ Read `START_HERE.md`, this file, `TASKS.md`
-- ✅ Confirm ADR-006 status with the user; if Accepted, flip its status line in the same batch as TASK-010
+- ✅ ADR-006 is Accepted (2026-10-21) and TASK-010 is done: use `CantolLink`, `cantolFound` and `CANTOL_*` in new code, never the older Red Pitaya / RP names
 - ✅ Branch off `master`; one task per branch; report in `reports/task/<area>/`
 - ✅ Do not start TASK-006 before decision 2; do not start TASK-007 before decisions 3 and 6
 - ✅ Keep this file and `CURRENT_STATE.md` current at the end of every task

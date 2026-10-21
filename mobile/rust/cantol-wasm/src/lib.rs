@@ -55,7 +55,7 @@ pub fn make_bench_stream(frames: u32, payload_len: u32) -> Vec<u8> {
     out
 }
 
-/// A frame decoder session for one RP connection.
+/// A frame decoder session for one Cantol connection.
 #[wasm_bindgen]
 pub struct Session {
     decoder: FrameDecoder,

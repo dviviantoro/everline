@@ -10,7 +10,7 @@
 
 | Rule | Detail |
 |---|---|
-| Device name | The device is **Cantol**. The words "Red Pitaya" and "RP" never appear in UI copy. Code and living docs are renamed under TASK-010; ADR-002 and ADR-003 keep their original wording as history. |
+| Device name | The device is **Cantol**. The words "Red Pitaya" and "RP" never appear in UI copy. Code and living docs were renamed by TASK-010 (done 2026-10-21); ADR-002 and ADR-003 keep their original wording as history. |
 | Assets | The app only surveys `type = "line"` assets. A line is one span between two poles. "Line | Cable" in the UI is the asset's `line_type`: **Line = `SUTM`** (overhead), **Cable = `SKTM`** (underground cable). Transformers and poles never appear in the mobile app. |
 | Condition | Normal, Warning, Critical = API `severity` values `normal`, `warning`, `critical`. |
 | Unit | PD magnitude is **dBmV** (`pd_unit = "dBmV"`), the unit the API, the seed data and the dashboard use. Numbers in the mock (mV, "182 mV") are illustrative and must not be copied. |
@@ -23,7 +23,7 @@
 
 ## 2) Screen to layer map
 
-Wizard states are the ones in `mobile-app.md`, with two amendments recorded in ADR-006: `RP_*` becomes `CANTOL_*`, and the separate `PERMS` state is folded into `LOCATION` (the location permission is requested on the GPS screen, which gives the order the product asked for: hotspot, then Cantol, then GPS).
+Wizard states are the ones in `mobile-app.md`, with two amendments recorded in ADR-006: the `RP_*` states of ADR-003 became `CANTOL_*` (renamed by TASK-010), and the separate `PERMS` state is folded into `LOCATION` (the location permission is requested on the GPS screen, which gives the order the product asked for: hotspot, then Cantol, then GPS).
 
 | # | Mock file | Route | Wizard state | Built in | Reads | Writes |
 |---|---|---|---|---|---|---|

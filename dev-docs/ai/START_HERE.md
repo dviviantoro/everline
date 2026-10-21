@@ -45,12 +45,11 @@
 In this order (details and owners in `TASKS.md`):
 
 1. **TASK-004 (needs the user, not an agent):** install the debug APK on a phone and read the self-test; run the hotspot and device-reachability spike on 2 to 3 phones; add `https://localhost` to `CORS_ORIGIN` in the VPS `backend/.env`.
-2. **TASK-010:** rename Red Pitaya/RP to Cantol in code and living docs. Small mechanical batch; do it before TASK-005.
-3. **TASK-005:** app scaffold, sign-in, welcome animation, theme, and the connection wizard (hotspot, Cantol, GPS). The design is ready: `mobile-ui-spec.md`.
-4. **Decision gate before TASK-006:** where does pulse detection run (Cantol or phone)? It decides whether WASM and the live phase plot exist.
-5. **TASK-006, TASK-007:** live pipeline; capture, tag and upload (online only).
-6. **TASK-008:** backend ingest hardening (idempotency, transaction, real status codes). Blocks safe offline retry.
-7. **TASK-011:** tracking mode. **TASK-009:** offline queue and release. **TASK-012:** refresh stale docs. **TASK-013:** backend security headers and rate limiting. **TASK-014:** second pass on the design mock.
+2. **TASK-005:** app scaffold, sign-in, welcome animation, theme, and the connection wizard (hotspot, Cantol, GPS). The design is ready: `mobile-ui-spec.md`. ADR-006 is Accepted and TASK-010 (the Cantol rename) is done, so use `CantolLink`, `cantolFound` and `CANTOL_*` from the first line.
+3. **Decision gate before TASK-006:** where does pulse detection run (Cantol or phone)? It decides whether WASM and the live phase plot exist.
+4. **TASK-006, TASK-007:** live pipeline; capture, tag and upload (online only).
+5. **TASK-008:** backend ingest hardening (idempotency, transaction, real status codes). Blocks safe offline retry.
+6. **TASK-011:** tracking mode. **TASK-009:** offline queue and release. **TASK-012:** refresh stale docs. **TASK-013:** backend security headers and rate limiting. **TASK-014:** second pass on the design mock.
 
 Decisions waiting on the user are listed in `FINAL_SYSTEM_HANDOVER.md` section "Decisions Waiting on the User".
 

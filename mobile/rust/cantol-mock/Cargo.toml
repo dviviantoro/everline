@@ -1,17 +1,17 @@
 [package]
-name = "rp-mock"
+name = "cantol-mock"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-description = "Simulated Red Pitaya: TCP data link plus UDP beacon, with fault injection. For developing the app without hardware."
+description = "Simulated Cantol device: TCP data link plus UDP beacon, with fault injection. For developing the app without hardware."
 
 [lib]
-name = "rp_mock"
+name = "cantol_mock"
 path = "src/lib.rs"
 
 [[bin]]
-name = "rp-mock"
+name = "cantol-mock"
 path = "src/main.rs"
 
 [dependencies]

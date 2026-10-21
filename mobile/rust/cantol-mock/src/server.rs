@@ -69,17 +69,17 @@ fn accept_loop(listener: &TcpListener, cfg: &Config, stop: &Arc<AtomicBool>) {
         match listener.accept() {
             Ok((stream, peer)) => {
                 conn_id += 1;
-                eprintln!("rp-mock: connection {conn_id} from {peer}");
+                eprintln!("cantol-mock: connection {conn_id} from {peer}");
                 let (cfg, stop) = (cfg.clone(), stop.clone());
                 connections.push(thread::spawn(move || {
                     if let Err(e) = serve(stream, &cfg, conn_id, &stop) {
-                        eprintln!("rp-mock: connection {conn_id} ended: {e}");
+                        eprintln!("cantol-mock: connection {conn_id} ended: {e}");
                     }
                 }));
             }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => thread::sleep(POLL),
             Err(e) => {
-                eprintln!("rp-mock: accept failed: {e}");
+                eprintln!("cantol-mock: accept failed: {e}");
                 break;
             }
         }
@@ -126,7 +126,7 @@ fn serve(mut stream: TcpStream, cfg: &Config, conn_id: u64, stop: &AtomicBool) -
 
 fn beacon_loop(cfg: &Config, tcp_port: u16, stop: &AtomicBool) {
     let Ok(socket) = UdpSocket::bind("0.0.0.0:0") else {
-        eprintln!("rp-mock: cannot open the beacon socket");
+        eprintln!("cantol-mock: cannot open the beacon socket");
         return;
     };
     let _ = socket.set_broadcast(true);
