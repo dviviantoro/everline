@@ -80,13 +80,6 @@ function waitUntil(ready: () => boolean, signal: AbortSignal): Promise<void> {
   });
 }
 
-const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-
-export function isIpv4(text: string): boolean {
-  const match = IPV4.exec(text.trim());
-  return match !== null && match.slice(1).every((part) => Number(part) <= 255);
-}
-
 /** Pulse rate per second for a level: 40 plus 10 per dB above the noise floor, at most 600. */
 export function pulseRateHz(levelDbmV: number, noiseDbmV: number): number {
   return Math.min(600, Math.round(40 + 10 * Math.max(0, levelDbmV - noiseDbmV)));

@@ -363,6 +363,8 @@ html body {
   align-items: center;
   gap: 12px;
   min-height: 52px;
+  padding: 8px 0;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--border);
 }
 .row:last-child {
@@ -393,6 +395,13 @@ html body {
   border: 1px solid var(--border2);
   border-radius: 6px;
   color: var(--cyan-text);
+}
+
+.bullets {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+  line-height: 1.6;
 }
 
 /* Pills */
@@ -612,7 +621,7 @@ textarea.input {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: var(--text);
+  background: var(--surface);
 }
 .switch[aria-checked='true'] .switch-knob {
   left: auto;
@@ -979,4 +988,22 @@ textarea.input {
   .selftest-host {
     background: #0a0a0a;
   }
+}
+
+/* Dialog */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 20px calc(20px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+  background: rgba(0, 0, 0, 0.55);
+}
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
+  padding: 20px;
 }

@@ -1,7 +1,8 @@
 /** Small shared components. Visual rules are in `styles/app.css` and `mobile-design-system.md`. */
 import type { ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 
+import { useBack } from '../app/back';
 import { useServices } from '../app/services';
 import { useTheme } from '../app/theme';
 import { otherTheme, themeToggleLabel } from '../core/theme';
@@ -39,18 +40,11 @@ export function BackLink({ to, label }: { to: string; label: string }) {
   );
 }
 
-/** A back control that goes one step back in history, or to `fallback` when there is none. */
-export function BackButton({ label, fallback }: { label: string; fallback: string }) {
-  const navigate = useNavigate();
+/** A back control that does what the hardware Back button does on this screen (including any confirmation). */
+export function BackButton({ label }: { label: string }) {
+  const { goBack } = useBack();
   return (
-    <button
-      type="button"
-      className="back-link"
-      onClick={() => {
-        if (window.history.length > 1) void navigate(-1);
-        else void navigate(fallback, { replace: true });
-      }}
-    >
+    <button type="button" className="back-link" onClick={goBack}>
       <ChevronLeftIcon size={18} />
       {label}
     </button>

@@ -1,11 +1,19 @@
-/** Routes and guards (`mobile-ui-spec.md` section 2). */
-import { Link, Navigate, Route, Routes } from 'react-router';
+/** Routes and guards (`mobile-ui-spec.md` section 2). The rules themselves are in `core/guards.ts`. */
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
 
+import { guardRedirect } from '../core/guards';
+import { routeForStep } from '../core/wizard';
+import { CantolScreen } from '../screens/CantolScreen';
+import { DiagnosticsScreen, EnterAddressScreen } from '../screens/CantolHelpScreens';
+import { DeviceScreen } from '../screens/DeviceScreen';
+import { GpsScreen } from '../screens/GpsScreen';
+import { HotspotScreen } from '../screens/HotspotScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
 import { SelfTestScreen } from '../selftest/SelfTestScreen';
-import { TopBar } from '../ui/primitives';
+import { useServices } from './services';
 import { useSession } from './session';
+import { useWizard } from './wizard';
 
 /** The Phase 0 self-test, reachable at /selftest in every build, with the look it has always had. */
 function SelfTestHost() {
@@ -21,30 +29,49 @@ function SelfTestHost() {
   );
 }
 
-/** Replaced by the connection wizard in the next milestone. */
-function WizardPlaceholder() {
+function Loading() {
   return (
-    <div className="screen">
-      <TopBar />
-      <p className="lead">The connection wizard is built in the next milestone.</p>
+    <div className="screen" role="status" aria-busy="true">
+      <span className="sr-only">Loading</span>
     </div>
   );
 }
 
+/** Routes whose guard needs the wizard's first checks, so they wait for them on a cold start. */
+function waitsForWizard(path: string): boolean {
+  return path === '/' || path.startsWith('/setup/') || ['/device', '/live', '/track', '/track/setup'].includes(path);
+}
+
 export function AppRoutes() {
   const session = useSession();
-  if (session.status === 'loading') return <div className="screen" aria-busy="true" />;
-  const signedIn = session.operator !== null;
+  const wizard = useWizard();
+  const { config } = useServices();
+  const { pathname } = useLocation();
+
+  if (session.status === 'loading') return <Loading />;
+  if (session.operator !== null && waitsForWizard(pathname) && !wizard.initialised) return <Loading />;
+
+  const redirect = guardRedirect(pathname, { operator: session.operator, step: wizard.step });
+  if (redirect !== null && redirect !== pathname) return <Navigate to={redirect} replace />;
+
   return (
     <Routes>
-      <Route path="/login" element={signedIn ? <Navigate to="/welcome" replace /> : <LoginScreen />} />
+      <Route path="/login" element={<LoginScreen />} />
       <Route
         path="/welcome"
-        element={signedIn ? <WelcomeScreen destination="/setup/hotspot" /> : <Navigate to="/login" replace />}
+        element={<WelcomeScreen destination={wizard.initialised ? routeForStep(wizard.step) : null} />}
       />
-      <Route path="/setup/hotspot" element={signedIn ? <WizardPlaceholder /> : <Navigate to="/login" replace />} />
+      <Route path="/setup/hotspot" element={<HotspotScreen />} />
+      <Route path="/setup/cantol" element={<CantolScreen />} />
+      <Route path="/setup/cantol/address" element={<EnterAddressScreen />} />
+      <Route path="/setup/cantol/diagnostics" element={<DiagnosticsScreen />} />
+      <Route path="/setup/gps" element={<GpsScreen />} />
+      <Route path="/device" element={<DeviceScreen />} />
+      {config.extraRoutes.map((route) => (
+        <Route key={route.path} path={route.path} element={route.element} />
+      ))}
       <Route path="/selftest" element={<SelfTestHost />} />
-      <Route path="*" element={<Navigate to={signedIn ? '/setup/hotspot' : '/login'} replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

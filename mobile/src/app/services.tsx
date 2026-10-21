@@ -50,7 +50,7 @@ export interface Services {
   api: SurveyApi;
   store: AppStore;
   /** The phone's clock in epoch milliseconds. */
-  now(): number;
+  now: () => number;
 }
 
 /** `pd_device` used by `backend/scripts/seed.ts` for the Cantol mobile unit. */
