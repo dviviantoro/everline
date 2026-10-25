@@ -510,6 +510,26 @@ async function main() {
     expect(phone.exchanged.length > exchangesBefore, 'a restart should verify Cantol again with a HELLO');
     expect(phone.scans.length === 1, `the remembered address should be tried first, so no second scan: ${String(phone.scans.length)} scans`);
 
+    // ----- A small phone with larger text: the Ready screen has a note the demo never showed
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = '130%';
+    });
+    await sleep(300);
+    await snap('ready-small-large-text');
+    const fit = await page.evaluate(() => {
+      const wide = document.documentElement.scrollWidth > window.innerWidth;
+      const small = [...document.querySelectorAll('button, a')]
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && (r.width < 44 || r.height < 44);
+        })
+        .map((el) => (el.textContent ?? '').trim().slice(0, 30));
+      return { wide, small };
+    });
+    expect(!fit.wide, 'the Ready screen must not scroll sideways at 360 px with 130 percent text');
+    expect(fit.small.length === 0, `touch targets under 44 px on the Ready screen: ${fit.small.join(', ')}`);
+
     // ----- The whole run
     expect([...origins].every((o) => o === `http://localhost:${String(PREVIEW_PORT)}`), `only the local origin may be requested, saw ${[...origins].join(', ')}`);
     expect(consoleProblems.length === 0, `the console should stay quiet, saw ${consoleProblems.join(' | ')}`);
