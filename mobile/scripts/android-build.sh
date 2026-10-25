@@ -3,21 +3,28 @@
 #
 #   scripts/android-build.sh                 build the debug APK (the self-test screen only)
 #   scripts/android-build.sh demo            build the demo APK: every screen, simulated data, no network
+#   scripts/android-build.sh field           build the field APK: the real hotspot, Cantol link and GPS
 #   scripts/android-build.sh install         build, then `adb install -r` on the connected phone
-#   scripts/android-build.sh demo install    both
+#   scripts/android-build.sh field install   both (demo or field, with install)
 #
 # --no-daemon keeps Gradle's memory in check on an 8 GB Mac.
 set -euo pipefail
 
 demo=0
+field=0
 install=0
 for arg in "$@"; do
   case "$arg" in
     demo) demo=1 ;;
+    field) field=1 ;;
     install) install=1 ;;
-    *) echo "android-build: unknown argument '$arg' (use: demo, install)" >&2; exit 2 ;;
+    *) echo "android-build: unknown argument '$arg' (use: demo, field, install)" >&2; exit 2 ;;
   esac
 done
+if [ "$demo" = 1 ] && [ "$field" = 1 ]; then
+  echo "android-build: choose demo or field, not both" >&2
+  exit 2
+fi
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=env.sh
@@ -27,6 +34,13 @@ cd "$root"
 [ -d node_modules ] || npm ci
 if [ "$demo" = 1 ]; then
   npm run build:demo
+elif [ "$field" = 1 ]; then
+  if [ ! -f config/device-profile.local.json ]; then
+    echo "android-build: config/device-profile.local.json is missing, so the EXAMPLE profile is built in." >&2
+    echo "  The hotspot name and password it shows will not match your Cantol. Copy" >&2
+    echo "  config/device-profile.example.json to config/device-profile.local.json and edit it." >&2
+  fi
+  npm run build:field
 else
   npm run build
 fi
@@ -35,11 +49,13 @@ npx cap sync android
 (cd android && ./gradlew --no-daemon assembleDebug)
 
 apk="$root/android/app/build/outputs/apk/debug/app-debug.apk"
-if [ "$demo" = 1 ]; then
-  # A separate name, so a demo build is never mistaken for the normal one.
-  cp "$apk" "$root/android/app/build/outputs/apk/debug/app-demo-debug.apk"
-  apk="$root/android/app/build/outputs/apk/debug/app-demo-debug.apk"
-fi
+for variant in demo field; do
+  if [ "${!variant}" = 1 ]; then
+    # A separate name, so a demo or field build is never mistaken for the normal one.
+    cp "$apk" "$root/android/app/build/outputs/apk/debug/app-$variant-debug.apk"
+    apk="$root/android/app/build/outputs/apk/debug/app-$variant-debug.apk"
+  fi
+done
 echo "APK: $apk ($(wc -c < "$apk" | tr -d ' ') bytes)"
 
 if [ "$install" = 1 ]; then

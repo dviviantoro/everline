@@ -1,0 +1,7 @@
+{
+  "ssid": "CANTOL-EXAMPLE",
+  "password": "change-me-example",
+  "band": "2.4 GHz",
+  "tcpPort": 47000,
+  "beaconPort": 47001
+}

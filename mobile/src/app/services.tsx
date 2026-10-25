@@ -41,6 +41,12 @@ export interface AppConfig {
   pdDevice: string;
   /** Elements rendered once inside the router (the demo build watches the route with one). */
   shellExtras: ReactNode;
+  /**
+   * When set, this build cannot measure yet: the Ready screen shows this text and disables
+   * "Start measurement", the Live, Tag, Tracking and Surveys screens are not offered, and their
+   * routes lead back to the Ready screen. Left out (or null) in a build that can measure.
+   */
+  measurementNote?: string | null;
 }
 
 export interface Services {

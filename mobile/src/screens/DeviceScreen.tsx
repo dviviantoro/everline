@@ -64,6 +64,7 @@ export function DeviceScreen() {
   const cantolOk = state.cantol === 'linked';
   const gpsOk = state.accuracyM !== null;
   const allOk = hotspotOk && cantolOk && gpsOk;
+  const measurementNote = config.measurementNote ?? null;
 
   const start = () => {
     void wizard.startMeasurement().then(() => navigate('/live'));
@@ -111,9 +112,14 @@ export function DeviceScreen() {
         </section>
 
         <div className="pinned" style={{ paddingBottom: 16 }}>
-          <button type="button" className="btn btn-primary" disabled={!allOk} onClick={start}>
+          <button type="button" className="btn btn-primary" disabled={!allOk || measurementNote !== null} onClick={start}>
             Start measurement
           </button>
+          {measurementNote === null ? null : (
+            <div className="helper" style={{ textAlign: 'center' }}>
+              {measurementNote}
+            </div>
+          )}
           {allOk ? null : (
             <div className="helper" style={{ textAlign: 'center' }} role="status">
               Something dropped out. It usually comes back by itself within 30 seconds.

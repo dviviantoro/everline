@@ -42,6 +42,9 @@ function Loading() {
   );
 }
 
+/** The screens that need a live measurement; a build with a `measurementNote` has none of them. */
+const MEASUREMENT_ROUTES: readonly string[] = ['/live', '/track/setup', '/track', '/tag', '/surveys'];
+
 /** Routes whose guard needs the wizard's first checks, so they wait for them on a cold start. */
 function waitsForWizard(path: string): boolean {
   return path === '/' || path.startsWith('/setup/') || ['/device', '/live', '/track', '/track/setup'].includes(path);
@@ -58,6 +61,7 @@ export function AppRoutes() {
 
   const redirect = guardRedirect(pathname, { operator: session.operator, step: wizard.step });
   if (redirect !== null && redirect !== pathname) return <Navigate to={redirect} replace />;
+  if (config.measurementNote != null && MEASUREMENT_ROUTES.includes(pathname)) return <Navigate to="/device" replace />;
 
   return (
     <Routes>

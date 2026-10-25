@@ -11,6 +11,9 @@ if (!container) throw new Error('index.html is missing #root');
 // everything the demo imports) is removed from the bundle. The demo build is `npm run build:demo`.
 if (import.meta.env.VITE_DEMO === '1') {
   void import('./demo/boot').then(({ bootDemo }) => bootDemo(container));
+} else if (import.meta.env.VITE_FIELD === '1') {
+  // The field build (`npm run build:field`): the real hotspot, Cantol link and GPS (ADR-008).
+  void import('./field/boot').then(({ bootField }) => bootField(container));
 } else {
   createRoot(container).render(
     <StrictMode>

@@ -41,4 +41,12 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Location, for the GPS fix of each survey and nothing else (ADR-003 decision 5: location is
+         the only runtime permission). The hotspot check, the subnet scan and the Cantol link use
+         plain sockets and network interfaces and need no further permission. required="false" so
+         Play does not hide the app from a phone that reports no GPS feature. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>

@@ -1,6 +1,7 @@
 /** The Device / Live / Surveys tabs. Shown on those three screens only (`mobile-ui-spec.md` section 2). */
 import { Link, useLocation } from 'react-router';
 
+import { useServices } from '../app/services';
 import { ListIcon, PulseIcon, WifiIcon } from './icons';
 
 const TABS = [
@@ -11,6 +12,9 @@ const TABS = [
 
 export function BottomNav() {
   const { pathname } = useLocation();
+  const { config } = useServices();
+  // A build that cannot measure yet has only the Device screen, so there is nothing to switch to.
+  if (config.measurementNote != null) return null;
   return (
     <nav className="tabs" aria-label="Main">
       {TABS.map((tab) => (
