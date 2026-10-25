@@ -46,7 +46,7 @@ Mobile data flow (target): Cantol sensor joins the phone's hotspot; a Kotlin plu
 | Mobile Rust workspace | mobile | Alpha | 42 native tests; golden vectors give digest `f7f47846` natively, in Node and in headless Chromium. Protocol is a placeholder (ADR-005 to be written) |
 | Mobile app shell | mobile | Alpha | Debug APK builds on JDK 21. Self-test PASS in an Android WebView on one phone (Samsung SM-A127F, Android 13, WebView Chrome 155, 2026-10-21); not yet tried on other phones |
 | Mobile sign-in, welcome animation, theme | mobile | Built (demo) | TASK-015; fonts bundled, tokens and light/dark as in `mobile-design-system.md`; launcher icon and launch screen done. Light palette still awaits approval (decision 4) |
-| Mobile connection wizard (hotspot, Cantol, GPS) | mobile | Built (demo) | Screens, reducer, guards, Back and 30 s recovery on simulated sources; the real plugins remain (TASK-005); needs the phone spike (TASK-004) |
+| Mobile connection wizard (hotspot, Cantol, GPS) | mobile | Built (demo and field, field not run on a phone) | Screens, reducer, guards, Back and 30 s recovery. Demo: simulated sources. Field build (`npm run build:field`, branch `feat/task-005-field-wizard`, ADR-008 Proposed): real Java plugins and adapters, run only against `cantol-mock` and a scripted phone; needs the phone spike (TASK-004) |
 | Mobile live PD screen | mobile | Built (demo), gated | On simulated pulses; needs the decision on where pulse detection runs; TASK-006 |
 | Mobile tracking mode | mobile | Built (demo) | Rules in `cantol-dsp` with golden vectors, both screens, drafts; thresholds are assumptions; TASK-011 |
 | Mobile tag, upload, survey list | mobile | Built (demo) | Tag, Surveys, payload and local store; the upload is simulated, the photo is missing; TASK-007 |
@@ -69,6 +69,7 @@ The previous handover was written 2026-09-05. Full detail: `dev-docs/CHANGELOG.m
 | 2026-10-21 | docs | docs | Mobile UX contract: ADR-006 (Proposed), UI spec, tracking mode, design system, design mock, tasks TASK-010 to TASK-014, this handover | No code changed. Defines what TASK-005 to TASK-011 build |
 | 2026-10-21 | mobile + docs | refactor | TASK-010: ADR-006 Accepted; Red Pitaya and RP renamed to Cantol in code and living docs (`rp-mock` is now `cantol-mock`). Branch `feat/task-010-cantol-rename` | No behaviour change; digest `f7f47846` unchanged. Device-id strings `RP-00A1`, `RP-MOCK`, `RP-01` kept on purpose |
 | 2026-10-21 | mobile | verify | TASK-004 part 2: the Phase 0 self-test passed in an Android WebView on one phone (Samsung SM-A127F, Android 13, Chrome 155): digest `f7f47846`, 0.839 ms per 64 KiB against a 2 ms budget | No code changed. The hotspot and Cantol-reachability spike and the VPS CORS change are still open |
+| 2026-10-25 | mobile + docs | feat | TASK-005: a field build (`npm run build:field`, `scripts/android-build.sh field`) with the real hotspot check, Cantol link and GPS; Java plugins, TypeScript adapters, handshake helpers in `cantol-proto` and WASM, device profile; ADR-008 (Proposed). Branch `feat/task-005-field-wizard` | Not run on a phone. The hotspot is guided, not forced (no Android API). The build cannot measure yet. All three APKs now declare location permissions. Normal build unchanged (digest `f7f47846`) |
 | 2026-10-21 | mobile + docs | feat | TASK-015: a demo build (`npm run build:demo`, `scripts/android-build.sh demo`) with every screen on simulated sources; ADR-007; tracking trend rules in `cantol-dsp` with golden vectors; launcher icon | A normal build is unchanged (self-test only, digest `f7f47846`). The demo never networks. Real plugins, upload and photo remain |
 
 ---
@@ -129,7 +130,7 @@ See `dev-docs/ai/KNOWN_ISSUES.md` for the live list (items 1 to 4 plus the addit
 | Priority | Repo | Task | Blockers |
 |----------|------|------|----------|
 | P1 | mobile | TASK-004: phone self-test, hotspot and Cantol reachability spike, CORS on the VPS | A phone with USB debugging; the user |
-| P1 | mobile | TASK-005: the real Kotlin plugins and device profile behind the wizard (the screens exist, TASK-015) | Spike results for ADR-003; open decisions 4, 5, 8 |
+| P1 | mobile | TASK-005: run the field build on a phone (the plugins, adapters and device profile are built, ADR-008 Proposed) | A phone, a hotspot, a Cantol or `cantol-mock` on a laptop; spike results for ADR-003; open decisions 4, 5, 8 |
 | P1 | mobile | TASK-006, TASK-007: the real live pipeline, upload and photo (the screens exist, TASK-015) | Decision gate; CORS; open questions 2, 3, 6 |
 | P2 | backend | TASK-008: ingest hardening (ADR-004, migration 005) | Explicit approval to sync `planning/schema.sql` |
 | P2 | mobile | TASK-011: confirm the tracking thresholds in the field (the screens and rules exist, TASK-015) | A real Cantol on a real line; TASK-006 and TASK-007 |

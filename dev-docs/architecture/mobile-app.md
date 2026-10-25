@@ -11,7 +11,8 @@
 | `mobile/rust` workspace (`cantol-proto`, `cantol-dsp`, `cantol-wasm`, `cantol-mock`) and golden vectors | Done, 42 tests |
 | `mobile/` shell with the WASM self-test, debug APK | Done; self-test passes in Chromium and on one phone (Samsung SM-A127F, Android 13, WebView Chrome 155) |
 | Screens, wizard reducer, guards, local store (Dexie), survey payload, tracking rules (WASM) | Done on simulated sources: the demo build (TASK-015, ADR-007; `mobile/src/core` holds the interfaces, `mobile/src/demo` the simulations) |
-| Kotlin plugins (`HotspotAssistant`, `CantolLink`, `GnssHelper`), real upload and photo | Not started (TASK-005 onward) |
+| Native plugins `HotspotAssistant`, `CantolLink`, `GnssHelper` (in Java), TypeScript adapters, device profile, field build | Built on branch `feat/task-005-field-wizard` (ADR-008, Proposed); run against `cantol-mock` and a scripted phone, **not on a phone** |
+| Live stream, real upload and photo | Not started (TASK-006, TASK-007) |
 
 ## How the WASM module is loaded
 
@@ -63,9 +64,11 @@ Capacitor facts that shape this (read in 8.3.4 source): plugin methods share one
 
 | Plugin | Responsibility |
 |---|---|
-| `HotspotAssistant` | Capabilities probe, hotspot-on detection, open hotspot settings from an ordered intent table; flag-gated custom local-only hotspot spike |
-| `CantolLink` | Discovery (last IP, UDP beacon, /24 scan), ping (HELLO/PONG), connect, send, events `cantolFound`, `rx`, `linkState`, `stats` |
-| `GnssHelper` | Ensure location services are on (Play Services dialog, settings fallback); GPS fixes come from `@capacitor/geolocation` |
+| `HotspotAssistant` | Hotspot-on detection (S0) and opening the system hotspot settings from an ordered table (S3). The flag-gated custom local-only hotspot spike (S1) and the capabilities probe are not built |
+| `CantolLink` | Transport primitives: `scan` (the hotspot /24 on the data port), `listenBeacon`, `exchange` (send one frame, read one), `connect` and `disconnect` (a held socket with a heartbeat and its own reconnect), `linkStatus`, the last known address, `diagnostics`; event `linkState` (`up`, `lost`). Built: no `rx` or `stats` events yet (TASK-006). The discovery order and the HELLO/PONG check are in `src/native/fieldLink.ts`, not in the plugin |
+| `GnssHelper` | Whether location services are on, and the location and app settings screens (no Play Services dialog); GPS fixes and the permission come from `@capacitor/geolocation` |
+
+Built in **Java** (`mobile/android/app/src/main/java/id/cantol/mobile`), not Kotlin as ADR-002 and ADR-003 say: the project has no Kotlin Gradle plugin. A pure-Java core in `link/` (no Android classes, tested under JUnit) does the transport; the three Capacitor plugin classes in `plugins/` are thin. The phone's side of the protocol (HELLO, PING, decoding PONG and the beacon) is `cantol-proto/src/handshake.rs`, exported through the WASM, so Java never reads a message. See ADR-008 and `mobile/docs/operations/field-build.md`.
 
 ## Connection wizard
 

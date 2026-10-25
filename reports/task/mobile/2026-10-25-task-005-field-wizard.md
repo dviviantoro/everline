@@ -1,0 +1,179 @@
+# LAPORAN TASK MOBILE
+
+Tanggal: 2026-10-25
+Task: TASK-005 - Mobile field build: the real hotspot check, Cantol link and GPS behind the connection wizard (MVP of the wizard)
+Repo: everline (single repository, project root)
+Branch: feat/task-005-field-wizard (off feat/mobile-demo-apk at 2628fb3, because the interfaces and screens it builds on exist only there; see Deviations)
+Commit: 7672b4d, 13080ec, 4b21e14, 59d814d (code); the docs, report and commit-log commits that follow
+
+1) Deskripsi Perubahan
+
+Adds a **field build** of the Android app. `npm run build:field` (or `scripts/android-build.sh field`) produces an APK whose hotspot check, Cantol link and GPS are real: the operator signs in, is helped to turn on the phone's hotspot, the app waits for the Cantol device to join it and links to it, then asks for location and waits for a good fix, and the app ends on a "Ready to measure" screen with the three connections shown live. It cannot measure yet: "Start measurement" is disabled with a plain note (the live stream is TASK-006, upload TASK-007). A normal build is unchanged (self-test only, digest `f7f47846`); the demo is unchanged.
+
+**What was asked, and what Android allows.** The request was an app that "forces the phone to change its hotspot configuration", waits for the Cantol (called Red Pitaya in the request) to connect, and enables GPS. Android has no public API to switch the normal hotspot on or to set its name and password (ADR-003 records this, and that the user was told). So the hotspot step is **guided, not forced**: the app shows the network name, password and band the Cantol is set to join, opens the phone's hotspot settings, and moves on by itself when it sees the hotspot come on. The other two steps are as asked.
+
+- **Switch.** `VITE_FIELD=1` is replaced by a constant at build time and `main.tsx` imports the field entry through a dynamic `import()` behind it, as for the demo (ADR-008, Proposed).
+- **Protocol stays in Rust.** `cantol-proto::handshake` builds the HELLO and PING frames and decodes the PONG and the UDP beacon; `cantol-wasm` exports `encode_hello`, `encode_ping`, `decode_pong`, `decode_beacon`. Purely additive.
+- **Native code moves bytes.** A pure-Java core (`id.cantol.mobile.link`, no Android classes): `Subnet`, `HotspotProbe` (access-point interface detection), `FrameIo` (cuts a TCP stream into frames by the length prefix only), `TcpProbe` (the /24 scan), `LinkClient` (one exchange), `CantolConnection` (a held socket: heartbeat, loss reported once, self-reconnect), `SettingsTargets` (the ordered table of settings screens). Three thin Capacitor plugins wrap it: `HotspotAssistant`, `CantolLink`, `GnssHelper`.
+- **TypeScript adapters** (`src/native`): `fieldLink` (discovery in the ADR-003 order, a candidate accepted only if it answers a HELLO with a PONG echoing the phone's nonce, ping by the median of three, the held link, native lost/up events into the wizard), `fieldHotspot`, `fieldGnss` (over `@capacitor/geolocation`), and the typed bridge.
+- **Device profile** (`src/field/deviceProfile.ts`, `config/device-profile.example.json`): network name, password, band and the two ports from the gitignored `config/device-profile.local.json`, else the example; validated; an error never repeats a value.
+- **Measurement gate.** An optional `AppConfig.measurementNote`: when set, the Ready screen disables "Start measurement" and shows the note, the tab bar is hidden and the measurement routes lead back to the Ready screen. Unset in the demo.
+- **Android.** `@capacitor/geolocation` added; `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` declared. The Android project is shared, so the demo and normal APKs list them too.
+
+2) Tujuan dan Manfaat
+
+- Put the connection half of the field flow on real sources, so the first phone test is a test of the real thing and not another mock.
+- Keep every byte of the protocol in tested Rust and keep the Java free of protocol meaning, so TASK-006 only adds a stream.
+- Make the Java core and the whole field bundle verifiable on a PC (JUnit against the real `cantol-mock`; headless Chromium with the real Capacitor bridge), because no phone was available.
+
+3) Daftar File yang Diubah
+
+Docs and decisions:
+- dev-docs/decisions/008-mobile-field-build.md (new, Proposed)
+- dev-docs/ai/TASKS.md, CURRENT_STATE.md, START_HERE.md, FINAL_SYSTEM_HANDOVER.md, TECHNICAL_DEBT.md, COMMIT_LOG.md, commit-logs/2026-10-25.md (new)
+- dev-docs/CHANGELOG.md, dev-docs/architecture/mobile-app.md
+- mobile/docs/operations/field-build.md (new), reports/task/mobile/2026-10-25-task-005-field-wizard.md (this file)
+
+Rust:
+- mobile/rust/cantol-proto/src/handshake.rs (new), lib.rs; mobile/rust/cantol-wasm/src/lib.rs; mobile/rust/cantol-mock/tests/e2e.rs (one test added)
+
+Android (Java and Gradle):
+- mobile/android/app/src/main/java/id/cantol/mobile/link/ (Subnet, HotspotProbe, FrameIo, TcpProbe, LinkClient, CantolConnection, SettingsTargets)
+- mobile/android/app/src/main/java/id/cantol/mobile/plugins/ (HotspotAssistantPlugin, CantolLinkPlugin, GnssHelperPlugin), MainActivity.java (registers them)
+- mobile/android/app/src/test/java/id/cantol/mobile/link/ (8 test classes and a fake Cantol)
+- AndroidManifest.xml (location permissions), capacitor.build.gradle and capacitor.settings.gradle (generated, register the geolocation plugin)
+
+App (mobile/src, config, scripts):
+- core/linkCodec.ts (+ tests), core/dspLoader.ts (`loadWasm`), test/dspNode.ts, test/frames.ts
+- native/ (plugins, fieldLink, fieldHotspot, fieldGnss and their tests), field/ (deviceProfile, runtime, boot and tests), main.tsx, env.d.ts
+- app/services.tsx (`measurementNote`), app/routes.tsx, screens/DeviceScreen.tsx, ui/BottomNav.tsx
+- config/device-profile.example.json; package.json and package-lock.json (`@capacitor/geolocation`, `build:field`)
+- scripts/android-build.sh (`field`), check-no-secrets.sh, link-frames-hex.mjs, verify-link-jvm.sh, verify-field-web.mjs
+
+Not changed: `apps/`, `backend/`, `ai-rules/`, `planning/`, the text of ADR-002, 003, 006 and 007, the existing frame code, golden vectors and self-test digest, the demo sources in `mobile/src/demo`.
+
+4) Snapshot Kode (Before -> After)
+
+4.1 The build switch
+
+File: mobile/src/main.tsx
+
+Before:
+```
+if (import.meta.env.VITE_DEMO === '1') {
+  void import('./demo/boot').then(({ bootDemo }) => bootDemo(container));
+} else {
+  createRoot(container).render(<StrictMode><App /></StrictMode>);
+}
+```
+
+After: one more branch, `else if (import.meta.env.VITE_FIELD === '1')`, importing `./field/boot`. Measured: the normal bundle's `index.js` is 232,093 bytes before and after, and holds no field or demo marker.
+
+4.2 The phone's side of the handshake
+
+File: mobile/rust/cantol-proto/src/handshake.rs (new)
+
+```
+pub fn hello_frame(nonce: u32, phone_epoch_ms: u64) -> Vec<u8>
+pub fn ping_frame(seq: u32) -> Vec<u8>
+pub fn pong_report(bytes: &[u8]) -> String      // {"proto":1,"caps":3,"fw":"0.1.0","device_id":"RP-MOCK",...} or {"error":"no_frame"}
+pub fn beacon_report(datagram: &[u8]) -> String
+```
+Java sends the frames as bytes and returns the replies as bytes; it never reads a CRC or a message.
+
+4.3 The held link
+
+File: mobile/android/app/src/main/java/id/cantol/mobile/link/CantolConnection.java
+
+A heartbeat frame (built by the codec) is repeated every interval (2 s). Any frame back is proof of life; after one silent interval, or a socket error, the link reports `LOST` once, closes, and retries every second, reporting `UP` when an answer comes. `close()` is silent. The JUnit tests drive it with a fake server that can answer, stay silent, or hang up.
+
+4.4 The hotspot step, as built
+
+File: mobile/src/native/fieldHotspot.ts and plugins/HotspotAssistantPlugin.java
+
+`isOn()` asks the plugin for an up access-point-style interface (names `ap0`, `swlan0`, `softap`, `wlan1` and up) holding a private IPv4 address. `openSettings()` tries, in order: `android.settings.TETHER_SETTINGS`, three AOSP components, then the public `WIRELESS_SETTINGS` and `SETTINGS`, and reports which opened and whether it was the exact screen.
+
+4.5 The measurement gate
+
+File: mobile/src/screens/DeviceScreen.tsx
+
+Before: `disabled={!allOk}`. After: `disabled={!allOk || measurementNote !== null}` and the note under the button; `BottomNav` returns null and `AppRoutes` redirects `/live`, `/surveys`, `/tag`, `/track`, `/track/setup` to `/device` when the note is set.
+
+5) Verifikasi UAT (User Acceptance Test)
+
+Environment: Linux aarch64 (Jetson), JDK 21.0.11, Rust 1.97.1, Node 22.23.1, headless Chromium 156.0.8078.4, Gradle 8.14 with AGP 8.13.
+
+| # | Tes | Hasil | Detail |
+|---|-----|-------|--------|
+| 1 | `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings` | PASS | No diff, no warnings |
+| 2 | `cargo test --workspace` | PASS | 63 passed, 0 failed (was 52): proto 30 (9 new handshake tests), mock end-to-end 8 (1 new: the phone's HELLO and PING frames against the live mock), wasm 6 (1 new) |
+| 3 | `npm run typecheck`, `npm run lint` (`--max-warnings 0`) | PASS | Exit 0 both (lint first failed with 29 findings in the new test doubles and was fixed, not silenced) |
+| 4 | `npm test` (Vitest) | PASS | 194 passed in 21 files (was 126 in 15): link codec 8 (2 against the real mock), `fieldLink` 26, device profile 19, GPS adapter, field services; the self-test digest pin still passes |
+| 5 | A mutation check on the adapter tests | PASS | Removing the "PONG must echo our nonce" check made one test fail; restored |
+| 6 | Java core: `./gradlew testDebugUnitTest` | PASS | 37 tests, 0 failed; 36 run anywhere |
+| 7 | `scripts/verify-link-jvm.sh`: the Java link against the real `cantol-mock`, with frames built by the real WASM codec | PASS | 37 of 37, 0 skipped (the mock-backed test ran); the mock process is stopped afterwards |
+| 8 | `scripts/verify-field-web.mjs`: the real field bundle, the real Capacitor bridge script and the real WASM in headless Chromium; a scripted Android side forwards `exchange` and `connect` to the real mock over TCP | PASS | 27 assertions in 4 of 4 runs; with the 360x640, 130 percent text layout check added, 29 assertions passed once. Covers: sign in, hotspot off then on (the wizard moves on by itself), found by the subnet scan and verified by a HELLO, 3 ping HELLOs, held link opened once with a PING heartbeat, location refused twice then allowed in app settings, location services off then on, Ready screen showing the profile name, the address and RTT and the GPS accuracy, "Start measurement" disabled with the note, no tab bar, the five measurement routes redirected, a lost link ("Reconnecting") and its recovery, a restart (the operator tapped Continue twice), only the local origin requested, console quiet |
+| 9 | Bugs that run found | FIXED | The profile's `import.meta.glob` needs string literals (the build had silently produced an empty profile); the stand-in answered `removeListener`, which fired the back button (a fault of the stand-in, the real Android side stays silent); two expectations in the script itself |
+| 10 | `npm run verify:demo` after the shared screens changed | PASS | 168 screens, 350 assertions, 0 problems, at 390x844 and 360x640 with 130 percent text, dark and light |
+| 11 | Normal build | PASS | `index.js` 232,093 bytes (unchanged); 0 field or demo markers in the bundle; in headless Chromium the routes `/`, `#/login`, `#/setup/hotspot`, `#/selftest` all show the self-test, PASS, digest `f7f47846`, 11 ok badges, no app screen; only the local origin; console quiet |
+| 12 | `scripts/android-build.sh field` after deleting `android/app/build` | PASS | BUILD SUCCESSFUL; 5,156,817 bytes; sha256 `2ec999a38d2bcc51a76a08cbf0fd4aa42f9e268c0b94b26462296d5ceb8b93c4`; **built with the example profile** (the script said so) |
+| 13 | `aapt2 dump badging` on the field, demo and normal APKs | PASS | Same for all three: package `id.cantol.mobile`, targetSdk 36; permissions INTERNET, ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION, ACCESS_NETWORK_STATE and the app's own signature permission; `allowBackup` false; no cleartext flag, no network security config. `ACCESS_NETWORK_STATE` is not declared by the app: it comes with a plugin dependency |
+| 14 | APK contents | PASS | The field APK has the field markers (`CANTOL-EXAMPLE`, `GnssHelper`, the measurement note) and no demo markers; the demo and normal APKs have none of the field markers; all three contain the three plugin classes (shared Android project) |
+| 15 | `scripts/check-no-secrets.sh` | PASS | No tracked secret file; no local profile existed to compare against |
+| 16 | Run on a phone | NOT RUN | No phone was attached (`adb devices` empty with the SDK's own `adb`) |
+
+6) Assumptions
+
+Recorded here instead of asking.
+
+1. The branch is off `feat/mobile-demo-apk`, not `master`: the interfaces, screens and wizard it builds on are only there (its pull request is not merged).
+2. The MVP is the connection wizard up to the Ready screen, which is exactly what was described. Live measurement and upload are not part of it (TASK-006 is gated on the open decision about where pulse detection runs; TASK-007 on decisions 3 and 6).
+3. Java instead of Kotlin (ADR-008 decision 6).
+4. The hotspot is guided, not forced, because Android offers no way to force it (ADR-003). S1 and S2 are not built.
+5. Timings: heartbeat 2 s with a reply expected within the same interval; reconnect every 1 s; HELLO connect 800 ms and read 1.5 s; subnet scan connect 400 ms with 48 in parallel; beacon listen in 1.5 s windows; 500 ms between search rounds; a held link counts as healthy for a ping if it heard something within two intervals.
+6. The access-point interface names are `ap<n>`, `swlan<n>`, `softap[<n>]` and `wlan<n>` for n of 1 and up. The settings table order is in `SettingsTargets.java`; only the last two entries are public and certain.
+7. Coarse location alone counts as "granted"; the existing 25 m accuracy rule then decides whether it is enough.
+8. A device profile needs a network name of 1 to 32 characters, a password of 8 to 63, a band, and two different ports from 1 to 65535. The example uses 47000 and 47001, the placeholder protocol's ports.
+9. `uses-feature android.hardware.location.gps` is `required="false"`, so Play does not hide the app from a phone that reports no GPS.
+10. The Cantol is named "Cantol" in code and UI. The request said "Red Pitaya", the old name; ADR-006 renamed it. The device-id bytes `RP-MOCK` in the mock stay (TASK-010).
+11. No push and no pull request: the branch is local. The user did not ask for either in this request.
+
+7) Deviations and decisions the user should know
+
+- **"Force" is not possible.** See section 1. If forcing matters, the only candidates are the hidden-API paths ADR-003 rejects for now (S1), and they would need testing on at least three phones.
+- **ADR-002 and ADR-003 say Kotlin; this is Java.** Recorded in ADR-008 and `mobile-app.md`.
+- **ADR-008 is Proposed, not Accepted.** The choices in it were mine.
+- **All three APKs now declare location permissions and ACCESS_NETWORK_STATE**, because the Android project is shared. The demo and normal builds never ask for them. The first request (the demo) said "no new permissions"; that applied to the demo and no longer fits a project that has a field build.
+- **The APK is about 0.7 MB larger** than the old demo APK (5,156,817 against 4,456,175 bytes), from the geolocation plugin's Google Play Services location and Ionic library.
+- **`.env.example` was not created.** It is for the API key, which arrives with TASK-007; `mobile-app.md` still lists it and the handover (row 9) still says so.
+- **No `rx` or `stats` events and no `startStream`.** `startStream` rejects with "not part of this release". TASK-006.
+- **The Play Services "turn on location" dialog is not used**; the operator is sent to the system location screen.
+- **After a restart the operator taps Continue about twice** (TECHNICAL_DEBT). It is the specified flow.
+- **The field walk uses real time**, not a fake clock, because pausing the clock stops the simulated hand-offs. It passed 4 of 4 before the layout check was added; the demo harness was flaky before it was fixed, so treat a failure of this one as worth a second run before blaming the app.
+- **A shell command of mine killed my own shell** (`pkill -f` on a string the same command contained). No effect on the work.
+
+8) Not verified
+
+**Nothing in this task has run on a phone.** What would show a problem only there:
+
+- The Java plugins on Android: whether `NetworkInterface` lists the access-point interface on Android 11 and later, and under which name; whether the settings screens in `SettingsTargets` exist on a given phone; whether a phone that is the access point delivers a UDP broadcast to the app without a multicast lock; the held socket through Doze, an app in the background and the hotspot's automatic turn-off.
+- `@capacitor/geolocation` and Android's permission dialogs, on a phone with and without Google Play Services.
+- A real Cantol: the protocol and ports are a placeholder (ADR-005); only `cantol-mock` has answered.
+- The Android WebView, other phones, Android's own text size, and the field screens in the light theme (the field walk ran in dark only; they are the same screens the demo checks in both themes).
+- The password's route into the APK: it is built in by design when a real profile is used; the APK was built here with the example profile, so nothing real was in it.
+- Real hotspot and Wi-Fi behaviour in general, and any Cantol-side configuration (it must be set to join the same network name and password as the profile).
+
+9) README changes, proposed and not applied (`ai-rules/AGENTS.md` rule 8)
+
+`mobile/` has no README yet (TASK-012 already proposes one; a draft is in the TASK-015 report). Add to that draft:
+
+```
+npm run build:field                                    the field bundle: real hotspot check, Cantol link and GPS
+scripts/android-build.sh field [install]               field APK; copy config/device-profile.example.json to config/device-profile.local.json first
+scripts/verify-link-jvm.sh                             the Java link tests, including one against the real cantol-mock
+node scripts/verify-field-web.mjs                      the field bundle in headless Chromium with a scripted Android side
+scripts/check-no-secrets.sh                            before any push
+src/native, src/field                                  the real adapters and the device profile (never in a normal or demo build)
+android/app/src/main/java/id/cantol/mobile             link/ (pure Java core) and plugins/ (three Capacitor plugins)
+docs: mobile/docs/operations/field-build.md, dev-docs/decisions/008-mobile-field-build.md
+```

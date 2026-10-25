@@ -45,7 +45,7 @@
 In this order (details and owners in `TASKS.md`):
 
 1. **TASK-004 (needs the user, not an agent):** the self-test has passed on one phone (2026-10-21); run the hotspot and device-reachability spike on 2 to 3 phones; add `https://localhost` to `CORS_ORIGIN` in the VPS `backend/.env`.
-2. **TASK-005:** the real Kotlin plugins behind the connection wizard (hotspot, Cantol, GPS). The screens already exist on simulated sources (TASK-015, `mobile/docs/operations/demo-build.md`); the design is `mobile-ui-spec.md`. ADR-006 is Accepted and TASK-010 (the Cantol rename) is done, so use `CantolLink`, `cantolFound` and `CANTOL_*` from the first line.
+2. **TASK-005:** the real plugins behind the connection wizard (hotspot, Cantol, GPS) are built on branch `feat/task-005-field-wizard` (ADR-008, Proposed; `mobile/docs/operations/field-build.md`) but have **never run on a phone**: the next step is the on-phone spike. The screens exist on simulated sources too (TASK-015, `mobile/docs/operations/demo-build.md`); the design is `mobile-ui-spec.md`. ADR-006 is Accepted and TASK-010 (the Cantol rename) is done, so use `CantolLink`, `cantolFound` and `CANTOL_*` from the first line.
 3. **Decision gate before TASK-006:** where does pulse detection run (Cantol or phone)? It decides whether WASM and the live phase plot exist.
 4. **TASK-006, TASK-007:** live pipeline; capture, tag and upload (online only).
 5. **TASK-008:** backend ingest hardening (idempotency, transaction, real status codes). Blocks safe offline retry.
