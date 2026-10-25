@@ -9,6 +9,7 @@
 pub mod crc32;
 pub mod decoder;
 pub mod frame;
+pub mod handshake;
 pub mod msg;
 pub mod report;
 

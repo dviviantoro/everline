@@ -6,6 +6,7 @@
 
 use cantol_dsp::{DBMV_ZONES, classify, trend};
 use cantol_proto::frame::{Kind, encode_frame};
+use cantol_proto::handshake;
 use cantol_proto::report::decode_report;
 use cantol_proto::{FrameDecoder, PROTO_VERSION};
 use wasm_bindgen::prelude::*;
@@ -72,6 +73,31 @@ pub fn peak_index(values: &[f64]) -> i32 {
 #[wasm_bindgen]
 pub fn guidance_code(live: f64, peak: f64) -> u8 {
     trend::guidance(live, peak).map_or(255, |g| g as u8)
+}
+
+/// The HELLO frame the phone sends first on a connection (and for a "ping"). The Android plugin
+/// sends these bytes as they are; it knows nothing of the protocol.
+#[wasm_bindgen]
+pub fn encode_hello(nonce: u32, phone_epoch_ms: f64) -> Vec<u8> {
+    handshake::hello_frame(nonce, phone_epoch_ms as u64)
+}
+
+/// The keep-alive frame the plugin repeats while linked; any frame back proves the link is alive.
+#[wasm_bindgen]
+pub fn encode_ping(seq: u32) -> Vec<u8> {
+    handshake::ping_frame(seq)
+}
+
+/// JSON for the answer to a HELLO (a PONG), or `{"error":"..."}`; see `handshake::pong_report`.
+#[wasm_bindgen]
+pub fn decode_pong(bytes: &[u8]) -> String {
+    handshake::pong_report(bytes)
+}
+
+/// JSON for one UDP discovery beacon, or `{"error":"not_a_beacon"}`.
+#[wasm_bindgen]
+pub fn decode_beacon(datagram: &[u8]) -> String {
+    handshake::beacon_report(datagram)
 }
 
 /// A valid stream of `frames` frames with `payload_len`-byte payloads, for throughput tests.
@@ -177,6 +203,22 @@ mod tests {
             );
             assert_eq!(session.pending(), 0);
         }
+    }
+
+    #[test]
+    fn handshake_exports_round_trip_through_the_decoder() {
+        // The exact bytes the plugin will send are valid frames of the right kinds.
+        for (bytes, kind) in [
+            (encode_hello(7, 1.76e12), Kind::Hello),
+            (encode_ping(3), Kind::Ping),
+        ] {
+            let mut session = Session::new();
+            assert_eq!(session.push(&bytes), 1, "{kind:?}");
+            assert_eq!(session.crc_errors(), 0.0);
+        }
+        assert!(decode_pong(&encode_hello(7, 1.0)).contains("unexpected_frame"));
+        assert_eq!(decode_pong(&[]), "{\"error\":\"no_frame\"}");
+        assert_eq!(decode_beacon(b"nope"), "{\"error\":\"not_a_beacon\"}");
     }
 
     #[test]

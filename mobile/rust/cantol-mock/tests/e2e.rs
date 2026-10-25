@@ -91,6 +91,52 @@ fn hello_is_answered_with_a_pong_echoing_the_nonce() {
     assert_eq!(&pong.device_id, b"RP-MOCK\0");
 }
 
+/// The bytes the phone's plugin will really send and the report the app will really read, against
+/// the live mock: nothing here is re-encoded by hand.
+#[test]
+fn the_phones_handshake_helpers_talk_to_the_mock() {
+    use cantol_proto::handshake::{beacon_report, hello_frame, ping_frame, pong_report};
+
+    let mock = spawn(quiet_config()).unwrap();
+    let mut stream = connect(mock.addr());
+    stream
+        .write_all(&hello_frame(NONCE, 1_760_000_000_000))
+        .unwrap();
+    let mut buf = [0u8; 256];
+    let n = stream.read(&mut buf).unwrap();
+    let report = pong_report(&buf[..n]);
+    assert!(report.contains("\"device_id\":\"RP-MOCK\""), "{report}");
+    assert!(report.contains(&format!("\"nonce\":{NONCE}")), "{report}");
+
+    // The keep-alive is answered with a frame, which is all the link-lost timer needs.
+    stream.write_all(&ping_frame(1)).unwrap();
+    let (frames, _, _) = read_until(&mut stream, Duration::from_secs(5), |f| !f.is_empty());
+    assert!(!frames.is_empty(), "no answer to the keep-alive");
+
+    // A refusal is reported, not mistaken for an answer.
+    let mut other = connect(mock.addr());
+    let mut refusal = Vec::new();
+    let future = Hello {
+        proto_min: 9,
+        proto_max: 9,
+        nonce: 1,
+        phone_epoch_ms: 1,
+    };
+    encode_frame(&mut refusal, Kind::Hello as u8, 0, 0, 0, &future.encode()).unwrap();
+    other.write_all(&refusal).unwrap();
+    let n = other.read(&mut buf).unwrap();
+    assert!(pong_report(&buf[..n]).contains("device_error"));
+
+    // The beacon the mock broadcasts decodes through the same report.
+    let beacon = Beacon {
+        proto: 1,
+        device_id: *b"RP-MOCK\0",
+        tcp_port: 47000,
+        fw: [0, 1, 0],
+    };
+    assert!(beacon_report(&beacon.encode()).contains("\"tcp_port\":47000"));
+}
+
 #[test]
 fn unsupported_protocol_range_gets_an_error_frame() {
     let mock = spawn(quiet_config()).unwrap();
