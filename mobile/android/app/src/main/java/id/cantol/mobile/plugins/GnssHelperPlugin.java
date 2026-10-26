@@ -1,8 +1,10 @@
 package id.cantol.mobile.plugins;
 
+import android.Manifest;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
@@ -12,11 +14,14 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import androidx.core.content.ContextCompat;
 
 /**
  * What {@code @capacitor/geolocation} does not do: tell whether location services are switched
  * on, and open the screens that fix it (location settings, this app's own settings). Reading the
- * fixes and asking for the permission stay with the geolocation plugin. The Play Services dialog
+ * fixes and asking for the permission stay with the geolocation plugin, except that the geolocation
+ * plugin REJECTS both permission calls while location services are off (its "location disabled"
+ * error), so {@link #permissionState} answers what it cannot: whether the permission is granted. The Play Services dialog
  * that turns location on without leaving the app is not used: it would tie the app to Google
  * Play Services, so the operator is sent to the system screen instead.
  */
@@ -33,6 +38,15 @@ public class GnssHelperPlugin extends Plugin {
         }
         JSObject out = new JSObject();
         out.put("enabled", enabled);
+        call.resolve(out);
+    }
+
+    /** Whether each location permission is granted. A plain system check: it works with location off. */
+    @PluginMethod
+    public void permissionState(PluginCall call) {
+        JSObject out = new JSObject();
+        out.put("fine", ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED);
+        out.put("coarse", ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED);
         call.resolve(out);
     }
 

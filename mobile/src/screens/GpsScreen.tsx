@@ -97,6 +97,11 @@ export function GpsScreen() {
       <p className="lead" role="status">
         {message}
       </p>
+      {wizard.checkErrors.gps === null ? null : (
+        <p className="helper" role="alert" style={{ marginTop: 8 }}>
+          Location check: {wizard.checkErrors.gps}
+        </p>
+      )}
 
       <section className="card" style={{ marginTop: 22, padding: 12 }}>
         <Radar found={found} accuracyM={accuracyM} />

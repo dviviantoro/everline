@@ -36,14 +36,55 @@ export function mapPermission(status: PermissionStatus): LocationPermission {
   return 'unknown';
 }
 
+/** What `@capacitor/geolocation` rejects `checkPermissions()` and `requestPermissions()` with while location services are off. */
+const LOCATION_DISABLED_CODE = 'OS-PLUG-GLOC-0007';
+
+export function isLocationDisabled(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === LOCATION_DISABLED_CODE || (error instanceof Error && /location services are not enabled/i.test(error.message));
+}
+
+/** A second request for the settings screen within this long is the same request (two steps of one tap). */
+const SETTINGS_DEBOUNCE_MS = 3000;
+
 export function createFieldGnss(geolocation: GeolocationApi, helper: GnssHelperNative, now: () => number): Gnss {
+  let settingsOpenedAt = -Infinity;
+  const openLocationSettings = async (): Promise<void> => {
+    if (now() - settingsOpenedAt < SETTINGS_DEBOUNCE_MS) return;
+    settingsOpenedAt = now();
+    await helper.openLocationSettings();
+  };
+  /** The permission as far as it can be told without the geolocation plugin: granted, or not (yet) known. */
+  const permissionWithoutPlugin = async (): Promise<LocationPermission> => {
+    const state = await helper.permissionState();
+    return state.fine || state.coarse ? 'granted' : 'unknown';
+  };
   return {
-    permission: async () => mapPermission(await geolocation.checkPermissions()),
-    requestPermission: async () => mapPermission(await geolocation.requestPermissions()),
+    // The geolocation plugin refuses both calls while location is off, which is the usual state of a
+    // phone before the operator turns it on. That must not leave the wizard unable to start.
+    permission: async () => {
+      try {
+        return mapPermission(await geolocation.checkPermissions());
+      } catch (error) {
+        if (!isLocationDisabled(error)) throw error;
+        return permissionWithoutPlugin();
+      }
+    },
+    requestPermission: async () => {
+      try {
+        return mapPermission(await geolocation.requestPermissions());
+      } catch (error) {
+        if (!isLocationDisabled(error)) throw error;
+        // Android's permission dialog cannot be asked for through the plugin while location is off, so
+        // send the operator to turn it on first; the next tap on "Enable GPS" then asks for permission.
+        await openLocationSettings();
+        return permissionWithoutPlugin();
+      }
+    },
     servicesEnabled: async () => (await helper.servicesEnabled()).enabled,
     ensureServicesOn: async () => {
       // The system screen is where the operator turns location on; the wizard re-checks every 2 s.
-      await helper.openLocationSettings();
+      await openLocationSettings();
       return (await helper.servicesEnabled()).enabled;
     },
     openAppSettings: () => helper.openAppSettings(),

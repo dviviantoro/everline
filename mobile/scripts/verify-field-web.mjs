@@ -74,7 +74,7 @@ const HEADERS = [
     name: 'CantolLink',
     methods: [...promise('scan', 'listenBeacon', 'exchange', 'connect', 'disconnect', 'linkStatus', 'getLastKnown', 'setLastKnown', 'diagnostics'), ...events],
   },
-  { name: 'GnssHelper', methods: promise('servicesEnabled', 'openLocationSettings', 'openAppSettings') },
+  { name: 'GnssHelper', methods: promise('servicesEnabled', 'permissionState', 'openLocationSettings', 'openAppSettings') },
   {
     name: 'Geolocation',
     methods: [...promise('checkPermissions', 'requestPermissions', 'getCurrentPosition', 'clearWatch'), { name: 'watchPosition', rtype: 'callback' }],
@@ -140,7 +140,11 @@ const watchTimers = new Set();
 function createPhone(respond) {
   const phone = {
     hotspotOn: false,
-    locationOn: true,
+    // A fresh phone: location services are off. The real geolocation plugin then REJECTS both of its
+    // permission calls (OS-PLUG-GLOC-0007), which is what once left the app stuck on the welcome screen.
+    locationOn: false,
+    // A plugin that fails outright, to prove no failing check can trap the app on the welcome screen.
+    gnssBroken: true,
     permission: 'prompt',
     permissionRequests: 0,
     blockExchange: false,
@@ -196,6 +200,12 @@ function createPhone(respond) {
     phone.blockExchange = false;
     if (phone.heldHost !== null) await hold(phone.heldHost, phone.heldPort, phone.heartbeat);
     emit('CantolLink', 'linkState', { state: 'up', detail: 'reconnected' });
+  };
+
+  /** What the real geolocation plugin does in checkPermissions and requestPermissions (read from its source). */
+  phone.requireLocationOn = () => {
+    if (phone.gnssBroken) throw new Error('simulated plugin failure');
+    if (!phone.locationOn) throw Object.assign(new Error('Location services are not enabled.'), { code: 'OS-PLUG-GLOC-0007' });
   };
 
   phone.handle = async ({ pluginId, methodName, options, callbackId }) => {
@@ -263,7 +273,10 @@ function createPhone(respond) {
       case 'CantolLink.diagnostics':
         return { rows: [{ label: 'Hotspot interface', value: phone.hotspotOn ? 'ap0 127.0.0.1/24' : 'none found' }] };
       case 'GnssHelper.servicesEnabled':
+        if (phone.gnssBroken) throw new Error('simulated plugin failure');
         return { enabled: phone.locationOn };
+      case 'GnssHelper.permissionState':
+        return { fine: phone.permission === 'granted', coarse: phone.permission === 'granted' };
       case 'GnssHelper.openLocationSettings':
         setTimeout(() => {
           phone.locationOn = true;
@@ -276,8 +289,10 @@ function createPhone(respond) {
         }, 800);
         return {};
       case 'Geolocation.checkPermissions':
+        phone.requireLocationOn();
         return { location: phone.permission, coarseLocation: phone.permission };
       case 'Geolocation.requestPermissions':
+        phone.requireLocationOn();
         phone.permissionRequests += 1;
         // Android: "prompt" -> refused once -> "prompt-with-rationale" -> refused again -> "denied" (blocked).
         if (phone.permission !== 'granted') phone.permission = phone.permissionRequests === 1 ? 'prompt-with-rationale' : 'denied';
@@ -414,6 +429,13 @@ async function main() {
     await page.getByLabel('Password').fill('anything');
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
+    // ----- The welcome screen, with a phone whose first checks fail (a broken plugin, location off).
+    // The app must say it is still checking and why, and must not stay there.
+    await until('the welcome screen to say it is still checking', async () => (await body()).includes('Still checking this phone'), 8000);
+    expect((await body()).includes('Location check: simulated plugin failure'), 'the welcome screen should say which check failed and why');
+    await snap('welcome-still-checking');
+    phone.gnssBroken = false;
+
     // ----- Hotspot: off, then on
     await until('the hotspot screen', () => hash() === '#/setup/hotspot', 15000);
     await until('the open-settings button', () => visible(page.getByRole('button', { name: 'Open hotspot settings' })));
@@ -434,10 +456,16 @@ async function main() {
     expect(phone.lastKnown === '127.0.0.1', 'the address that worked should be remembered');
     expect((await body()).includes('127.0.0.1'), 'the Cantol screen should show the address found');
 
-    // ----- GPS: refused, refused again (blocked), allowed in app settings; services off, then on
+    // ----- GPS, from a phone with location OFF: Enable GPS first sends the operator to turn it on (the
+    // geolocation plugin cannot ask for the permission until then); then the permission is refused,
+    // refused again (blocked) and allowed in app settings; then location is off again and turned on.
     await page.getByRole('link', { name: 'Continue' }).click();
     await until('the GPS screen', () => hash() === '#/setup/gps');
     await snap('gps-initial');
+    expect(!(await body()).includes('Location check:'), 'with location off the screen is not an error: no failure text');
+    await page.getByRole('button', { name: 'Enable GPS' }).click();
+    await until('the location settings to open', () => phone.calls.includes('GnssHelper.openLocationSettings'), 4000);
+    await until('location to be on', () => phone.locationOn, 4000);
     await page.getByRole('button', { name: 'Enable GPS' }).click();
     await until('"not allowed" after the first refusal', async () => (await body()).includes('Location access was not allowed'));
     await snap('gps-denied');
@@ -451,7 +479,7 @@ async function main() {
     await page.getByRole('button', { name: 'Turn on location' }).click();
     await until('a good fix', () => visible(page.getByRole('heading', { name: /found/i })), 20000);
     await snap('gps-found');
-    // Two refusals, then asked again when "Turn on location" is tapped (granted by then).
+    // Asked and refused twice while location was on; the asks made with location off were rejected by the plugin.
     expect(phone.permissionRequests >= 2, `the permission should have been asked at least twice, was ${String(phone.permissionRequests)}`);
     expect(phone.calls.includes('GnssHelper.openLocationSettings') && phone.calls.includes('GnssHelper.openAppSettings'), 'both settings screens should have been opened');
     await page.getByRole('link', { name: 'Continue' }).click();

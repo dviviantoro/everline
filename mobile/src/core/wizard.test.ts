@@ -94,6 +94,44 @@ describe('wizard steps follow the first unmet requirement', () => {
   });
 });
 
+describe('a quick check that never answers cannot trap the app', () => {
+  it('opens the first screen with the unanswered facts counted as not met', () => {
+    const s = run([{ type: 'CHECKS_GAVE_UP' }]);
+    expect(wizardInitialised(s)).toBe(true);
+    expect(s.hotspot).toBe('off');
+    expect(s.gpsServices).toBe('off');
+    expect(s.gpsPermission).toBe('unknown');
+    expect(wizardStep(s)).toBe('HOTSPOT_GUIDE');
+  });
+
+  it('leaves a fact that did answer exactly as it was', () => {
+    const answered = run([hotspotOn, { type: 'GPS_PERMISSION', permission: 'granted' }, { type: 'GPS_SERVICES', enabled: true }]);
+    expect(run([{ type: 'CHECKS_GAVE_UP' }], answered)).toEqual(answered);
+  });
+
+  it('keeps what only one check answered, and fills in the other', () => {
+    const hotspotOnly = run([hotspotOn]);
+    const s = run([{ type: 'CHECKS_GAVE_UP' }], hotspotOnly);
+    expect([s.hotspot, s.gpsChecked, s.gpsServices]).toEqual(['on', true, 'off']);
+    const gpsOnly = run([{ type: 'GPS_PERMISSION', permission: 'denied' }, { type: 'GPS_SERVICES', enabled: true }]);
+    const t = run([{ type: 'CHECKS_GAVE_UP' }], gpsOnly);
+    expect([t.hotspot, t.gpsPermission, t.gpsServices]).toEqual(['off', 'denied', 'on']);
+  });
+
+  it('is replaced by the real answers when they arrive, and is idempotent', () => {
+    const gaveUp = run([{ type: 'CHECKS_GAVE_UP' }]);
+    expect(run([{ type: 'CHECKS_GAVE_UP' }], gaveUp)).toEqual(gaveUp);
+    const later = run([hotspotOn, { type: 'GPS_PERMISSION', permission: 'granted' }, { type: 'GPS_SERVICES', enabled: true }], gaveUp);
+    expect([later.hotspot, later.gpsPermission, later.gpsServices]).toEqual(['on', 'granted', 'on']);
+  });
+
+  it('does not start a hotspot grace period out of a guess', () => {
+    const s = run([{ type: 'CHECKS_GAVE_UP' }, hotspotOn, { type: 'HOTSPOT_STATUS', on: false, at: T0 + 1 }]);
+    expect(s.hotspotLostAt).not.toBeNull();
+    expect(run([{ type: 'CHECKS_GAVE_UP' }]).hotspotLostAt).toBeNull();
+  });
+});
+
 describe('GPS accuracy', () => {
   it('needs a fix of 25 m or better (an assumption), exactly 25 passing', () => {
     expect(MIN_GPS_ACCURACY_M).toBe(25);

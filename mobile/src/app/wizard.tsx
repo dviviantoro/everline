@@ -36,6 +36,8 @@ import { useSession } from './session';
 
 const HOTSPOT_POLL_MS = 1500;
 const GPS_POLL_MS = 2000;
+/** How long the first screen waits for the quick checks before it stops waiting for the ones that have not answered. */
+const CHECKS_GIVE_UP_MS = 4000;
 const NO_FIX_AFTER_MS = 5000;
 const RETRY_DISCOVERY_MS = 2000;
 const VERIFY_TIMEOUT_MS = 5000;
@@ -79,6 +81,8 @@ interface WizardValue {
   helpCard: boolean;
   /** Why the last manual connection attempt failed, in words an operator can act on. */
   discoveryError: string | null;
+  /** What the latest hotspot check or location check failed with (null while it works), so a stuck screen can say why. */
+  checkErrors: { hotspot: string | null; gps: string | null };
   manualAddress: string | null;
   openHotspotSettings: () => void;
   continueAnyway: () => void;
@@ -129,6 +133,8 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   const [manualAddress, setManualAddress] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [hotspotError, setHotspotError] = useState<string | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
   const [fixStore] = useState(createFixStore);
 
   const hotspotOk = hotspotMet(state);
@@ -156,9 +162,13 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       void hotspot
         .isOn()
         .then((on) => {
-          if (alive) dispatch({ type: 'HOTSPOT_STATUS', on, at: now() });
+          if (!alive) return;
+          dispatch({ type: 'HOTSPOT_STATUS', on, at: now() });
+          setHotspotError(null);
         })
-        .catch(() => undefined);
+        .catch((error: unknown) => {
+          if (alive) setHotspotError(message(error));
+        });
     };
     check();
     const id = window.setInterval(check, HOTSPOT_POLL_MS);
@@ -178,8 +188,11 @@ export function WizardProvider({ children }: { children: ReactNode }) {
           if (!alive) return;
           dispatch({ type: 'GPS_PERMISSION', permission });
           dispatch({ type: 'GPS_SERVICES', enabled: services });
+          setGpsError(null);
         })
-        .catch(() => undefined);
+        .catch((error: unknown) => {
+          if (alive) setGpsError(message(error));
+        });
     };
     check();
     const id = window.setInterval(check, GPS_POLL_MS);
@@ -188,6 +201,20 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       window.clearInterval(id);
     };
   }, [enabled, gnss, checkRound]);
+
+  // The first screen needs the hotspot and location checks to have answered. If one fails or never
+  // returns, stop waiting for it after a few seconds (it is counted as "not met"; the checks go on
+  // and correct it) so the app cannot sit on the welcome screen forever.
+  const initialised = wizardInitialised(state);
+  useEffect(() => {
+    if (!enabled || initialised) return undefined;
+    const id = window.setTimeout(() => {
+      dispatch({ type: 'CHECKS_GAVE_UP' });
+    }, CHECKS_GIVE_UP_MS);
+    return () => {
+      window.clearTimeout(id);
+    };
+  }, [enabled, initialised, checkRound]);
 
   // Fixes, while permission is granted and location is on.
   useEffect(() => {
@@ -368,6 +395,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       initialised: wizardInitialised(state),
       helpCard: helpCardVisible(state),
       discoveryError,
+      checkErrors: { hotspot: hotspotError, gps: gpsError },
       manualAddress,
       openHotspotSettings: () => {
         void hotspot.openSettings();
@@ -386,11 +414,16 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         setRetryNonce((n) => n + 1);
       },
       enableGps: async () => {
-        const permission = await gnss.requestPermission();
-        dispatch({ type: 'GPS_PERMISSION', permission });
-        if (permission === 'granted') {
-          const on = await gnss.ensureServicesOn();
-          dispatch({ type: 'GPS_SERVICES', enabled: on });
+        try {
+          const permission = await gnss.requestPermission();
+          dispatch({ type: 'GPS_PERMISSION', permission });
+          if (permission === 'granted') {
+            const on = await gnss.ensureServicesOn();
+            dispatch({ type: 'GPS_SERVICES', enabled: on });
+          }
+          setGpsError(null);
+        } catch (error) {
+          setGpsError(message(error));
         }
       },
       openAppSettings: () => {
@@ -407,7 +440,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       },
       fixStore,
     }),
-    [state, discoveryError, manualAddress, hotspot, gnss, link, startMeasurement, stopMeasurement, fixStore],
+    [state, discoveryError, hotspotError, gpsError, manualAddress, hotspot, gnss, link, startMeasurement, stopMeasurement, fixStore],
   );
 
   return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>;

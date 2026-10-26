@@ -94,6 +94,7 @@ export type WizardEvent =
   | { type: 'GPS_SERVICES'; enabled: boolean }
   | { type: 'GPS_FIX'; accuracyM: number }
   | { type: 'GPS_LOST'; at: number }
+  | { type: 'CHECKS_GAVE_UP' }
   | { type: 'STREAM_STARTED' }
   | { type: 'STREAM_STOPPED' }
   | { type: 'TICK'; at: number }
@@ -170,6 +171,16 @@ export function wizardReducer(s: WizardState, event: WizardEvent): WizardState {
       return { ...s, gpsServices: event.enabled ? 'on' : 'off' };
     case 'GPS_FIX':
       return { ...s, accuracyM: event.accuracyM, gpsLostAt: null };
+    case 'CHECKS_GAVE_UP':
+      // A quick check that never answered (it failed, or never returned) counts as "not met" so the
+      // first screen can open instead of the app waiting for it forever. The checks keep running and
+      // replace these guesses as soon as they answer; a fact that did answer is left alone.
+      return {
+        ...s,
+        hotspot: s.hotspot === 'unknown' ? 'off' : s.hotspot,
+        gpsChecked: true,
+        gpsServices: s.gpsServices === 'unknown' ? 'off' : s.gpsServices,
+      };
     case 'GPS_LOST':
       if (s.accuracyM === null) return s;
       return { ...s, accuracyM: null, gpsLostAt: event.at, nowMs: Math.max(s.nowMs, event.at) };

@@ -55,6 +55,8 @@ export interface CantolLinkNative {
 
 export interface GnssHelperNative {
   servicesEnabled(): Promise<{ enabled: boolean }>;
+  /** Whether each location permission is granted; unlike the geolocation plugin, this works with location off. */
+  permissionState(): Promise<{ fine: boolean; coarse: boolean }>;
   openLocationSettings(): Promise<void>;
   openAppSettings(): Promise<void>;
 }

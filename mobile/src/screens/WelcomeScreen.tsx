@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import { useWizard } from '../app/wizard';
 import { ArrowRightIcon, CheckIcon } from '../ui/icons';
 import { BrandMark, TopBar } from '../ui/primitives';
 import { useReducedMotion } from '../ui/useReducedMotion';
@@ -19,6 +20,7 @@ const SETTLE_MS = 450;
 
 export function WelcomeScreen({ destination }: { destination: string | null }) {
   const navigate = useNavigate();
+  const { checkErrors } = useWizard();
   const reduced = useReducedMotion();
   const [animationDone, setAnimationDone] = useState(false);
   const [settled, setSettled] = useState(false);
@@ -41,6 +43,15 @@ export function WelcomeScreen({ destination }: { destination: string | null }) {
       window.clearTimeout(timer);
     };
   }, [animationDone, reduced]);
+
+  // The animation is over but the phone's first checks have not answered: say so, and why if a check failed.
+  const waiting = animationDone && destination === null;
+  const failure =
+    checkErrors.hotspot !== null
+      ? `Hotspot check: ${checkErrors.hotspot}`
+      : checkErrors.gps !== null
+        ? `Location check: ${checkErrors.gps}`
+        : null;
 
   const ready = settled && destination !== null;
   useEffect(() => {
@@ -90,6 +101,17 @@ export function WelcomeScreen({ destination }: { destination: string | null }) {
             <span style={{ color: 'var(--cyan-text)' }}>Signing you in&hellip;</span>
           )}
         </div>
+        {waiting ? (
+          <div className="helper" role="status" style={{ textAlign: 'center' }}>
+            Still checking this phone.
+            {failure === null ? null : (
+              <>
+                <br />
+                {failure}
+              </>
+            )}
+          </div>
+        ) : null}
         <div className="splash-bar" aria-hidden="true">
           <span />
         </div>
