@@ -36,7 +36,7 @@ The same as `build-apk.md` (JDK 21, Android SDK with platform 36, the pinned Rus
 1. Sign in with any email (the sign-in is a gate, not an account; the email is stored as the surveyor).
 2. "Turn on your hotspot": set the name and password shown, then tap "Open hotspot settings". Turn the hotspot on. The app notices and moves on.
 3. "Waiting for Cantol": power the Cantol on. It is found by its beacon or by a scan of the hotspot's network, then checked with a HELLO. A search that finds nothing for a minute offers "Enter IP manually" and "Diagnostics".
-4. "Enable location": allow location, switch location on if it is off, wait for a fix of 25 m or better.
+4. "Enable location": allow location, switch location on if it is off, wait for a fix of 25 m or better. A phone usually has location off to begin with: the first tap on "Enable GPS" then opens the system location settings (the permission cannot be asked for until location is on); switch it on, come back, and tap "Enable GPS" again for the permission dialog.
 5. "Ready to measure": hotspot, Cantol (address and round trip) and location, each live. If one drops, the row says "Reconnecting" or "No fix" and the app recovers silently for 30 seconds before reopening the setup.
 
 ### Trying it without a Cantol
@@ -67,6 +67,7 @@ The first run on a phone is the spike ADR-003 asks for. Record what happens in `
 
 | Symptom | Cause and fix |
 |---|---|
+| Stuck on the welcome screen, "Still checking this phone" | A check of the phone failed or never answered; the line under it says which and why. After about 4 seconds the app goes on anyway and keeps re-checking. If you see this, report the line. (An earlier build got stuck here for good when location was off; fixed 2026-10-26.) |
 | The hotspot screen shows "CANTOL-EXAMPLE" and "change-me-example" | The build used the example profile. Create `config/device-profile.local.json` and rebuild. |
 | "The app could not start: device profile ..." | The profile is invalid; the message names the field (never its value). Network name 1 to 32 characters, password 8 to 63, two different ports from 1 to 65535. |
 | The hotspot is on but the app still says Off | The interface name or address was not recognised (see `Hotspot interface` under Diagnostics). Tap "Continue anyway"; the next screen proves reachability. Report the interface name so it can be added. |

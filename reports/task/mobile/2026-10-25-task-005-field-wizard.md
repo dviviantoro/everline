@@ -177,3 +177,14 @@ src/native, src/field                                  the real adapters and the
 android/app/src/main/java/id/cantol/mobile             link/ (pure Java core) and plugins/ (three Capacitor plugins)
 docs: mobile/docs/operations/field-build.md, dev-docs/decisions/008-mobile-field-build.md
 ```
+
+10) Follow-up 2026-10-26: stuck on the welcome screen (found on the first real phone)
+
+The user installed the APK, signed in with `admin` and `admin` (any text is accepted), and the welcome screen's Continue did nothing.
+
+- **Cause.** Continue stays disabled until the wizard's first checks (hotspot, location permission, location services) have all answered. `@capacitor/geolocation` rejects `checkPermissions()` and `requestPermissions()` with "Location services are not enabled" (`OS-PLUG-GLOC-0007`) while location is off, which is how most phones start. The wizard asked for permission and services together with a bare `.catch(() => undefined)`, so the failure was invisible, retried every 2 s, and the wizard never initialised. This is a real defect in what was built; it was found by reading the plugin's source after the report.
+- **Why verification missed it.** The browser walk's stand-in answered every native call and only turned location off after the first checks had passed. It modelled the phone the author had in mind, not the plugin's actual behaviour.
+- **Fix at the cause** (commit `0235b4c`): with location off, `fieldGnss` reads the permission through a new native `GnssHelper.permissionState`, and asking for it opens the location settings once.
+- **Fix in general:** the reducer event `CHECKS_GAVE_UP` (4 s) opens the first screen with unanswered checks counted as "not met"; checks keep polling and correct it. The welcome screen says "Still checking this phone" and which check failed; the GPS screen shows a location failure; `enableGps` no longer swallows errors.
+- **Verification after the fix.** Vitest 203 (5 reducer tests and 4 GPS adapter tests added); the field walk now starts with location off, the plugin rejecting while it is off and a plugin failing at the start: 31 assertions, 3 of 3 runs; with both fixes undone it fails on this bug (a mutation check); `verify:demo` 168 screens and 350 assertions; Java 37 of 37 against the real mock; clean field APK 5,157,545 bytes, sha256 `dc31a953e91230ddc09c524be8a788c36c5ead6f4b0c1b1e0ff88854e58cf4f8`, built with the example profile.
+- **Still unverified:** everything in section 8. The fix is verified against a model of the plugin read from its source, not against a phone. Other real-plugin behaviours may differ in the same way; the first-run flow on a real phone is the test.

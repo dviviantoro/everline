@@ -6,6 +6,12 @@
 
 ## [Unreleased] — Current Sprint/Milestone
 
+### Fixed — mobile: the field build stuck on the welcome screen when location was off (TASK-005, 2026-10-26)
+- Reported from a phone: after signing in, the welcome screen's Continue did nothing. Cause: Continue waits for the wizard's first checks to answer, and `@capacitor/geolocation` rejects `checkPermissions()` and `requestPermissions()` with "Location services are not enabled" (`OS-PLUG-GLOC-0007`) whenever location is switched off, the usual state of a phone. The wizard asked for permission and services together, swallowed the failure and retried silently forever. The browser walk of 2026-10-25 missed it because its stand-in always answered.
+- Fixed at the cause: with location off, the permission is read through a new native `GnssHelper.permissionState` (a plain `checkSelfPermission`), and asking for it sends the operator to the location settings, once per tap. Fixed in general: a new wizard event `CHECKS_GAVE_UP` opens the first screen after 4 s with unanswered checks counted as "not met", so no failed or hung check can trap the app on that screen; the polls go on and correct it. Visible: the welcome screen says "Still checking this phone" and which check failed and why, the GPS screen shows a location failure, and `enableGps` no longer swallows errors.
+- `scripts/verify-field-web.mjs` now models the real plugin: the phone starts with location off, the plugin rejects both permission calls while it is off, and a plugin fails at the start. 31 assertions, 3 of 3 runs; with both fixes undone it fails on this bug. Vitest 203 (was 194); `verify:demo` and the Java tests unchanged.
+- Still not run on a phone after the fix.
+
 ### Added — mobile: a field build with the real hotspot check, Cantol link and GPS (TASK-005, 2026-10-25)
 - ADR-008 (Proposed). `VITE_FIELD=1` (`npm run build:field`, `scripts/android-build.sh field`) supplies real implementations of `HotspotAssistant`, `CantolLink` and `Gnss` through the same `Services` the demo uses; the wizard, guards and screens are unchanged. The normal and demo bundles do not contain it (the normal `index.js` is still 232,093 bytes, digest `f7f47846`). Guide: `mobile/docs/operations/field-build.md`.
 - The hotspot is guided, never forced: Android has no public API to switch it on or set its name and password (ADR-003). The app shows the name, password and band from the device profile, opens the phone's hotspot settings from an ordered table of screens, and moves on by itself when it sees the hotspot come on.
