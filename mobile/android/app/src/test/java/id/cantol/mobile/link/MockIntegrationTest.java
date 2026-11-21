@@ -47,4 +47,48 @@ public class MockIntegrationTest {
             link.close();
         }
     }
+
+    /** Start and Stop, built by the real codec, against the real mock: pulses flow, then stop. */
+    @Test
+    public void startAndStopStreamPulsesFromTheRealMock() throws Exception {
+        String port = System.getenv("CANTOL_MOCK_PORT");
+        String pingHex = System.getenv("CANTOL_PING_HEX");
+        String startHex = System.getenv("CANTOL_START_HEX");
+        String stopHex = System.getenv("CANTOL_STOP_HEX");
+        assumeNotNull(port, pingHex, startHex, stopHex);
+
+        java.util.concurrent.atomic.AtomicInteger pulseFrames = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger statusFrames = new java.util.concurrent.atomic.AtomicInteger();
+        CantolConnection.Listener listener = new CantolConnection.Listener() {
+            @Override
+            public void onState(CantolConnection.State state, String detail) {}
+
+            @Override
+            public void onFrame(byte[] frame) {
+                if (frame[3] == 0x10) pulseFrames.incrementAndGet();
+                if (frame[3] == 0x03) statusFrames.incrementAndGet();
+            }
+        };
+        CantolConnection link = new CantolConnection("127.0.0.1", Integer.parseInt(port), hex(pingHex), 500, 1000, listener);
+        link.open();
+        try {
+            Thread.sleep(700);
+            assertEquals("no pulses before Start", 0, pulseFrames.get());
+            assertTrue("the status arrives anyway", statusFrames.get() >= 1);
+
+            link.send(hex(startHex));
+            Thread.sleep(1200);
+            int whileStreaming = pulseFrames.get();
+            assertTrue("pulses after Start: " + whileStreaming, whileStreaming >= 10);
+
+            link.send(hex(stopHex));
+            Thread.sleep(300);
+            int afterStop = pulseFrames.get();
+            Thread.sleep(800);
+            assertEquals("no more pulses after Stop", afterStop, pulseFrames.get());
+            assertTrue(link.isUp());
+        } finally {
+            link.close();
+        }
+    }
 }

@@ -29,7 +29,9 @@ import java.util.concurrent.Executors;
  * The transport half of the Cantol link (ADR-003): scan the hotspot subnet, listen for the
  * beacon, make one exchange, hold the connection with a heartbeat. It moves bytes and nothing
  * else: every frame it sends is built by the WASM codec and every reply goes back to the app as
- * base64 to be read there.
+ * base64 to be read there. On the held connection that includes the stream: each whole frame that
+ * arrives is emitted as a {@code frame} event (only while the app listens for it), and
+ * {@link #send} writes a frame the app built, such as Start or Stop.
  *
  * Capacitor runs all plugin methods on one shared thread, so every method that waits on the
  * network hands its work to this plugin's own pool and resolves the call from there.
@@ -142,11 +144,23 @@ public class CantolLinkPlugin extends Plugin {
         int connectMs = call.getInt("connectTimeoutMs", 1500);
         pool.execute(() -> {
             closeConnection();
-            CantolConnection next = new CantolConnection(host, port, Base64.decode(heartbeat, Base64.DEFAULT), intervalMs, connectMs, (state, detail) -> {
-                JSObject event = new JSObject();
-                event.put("state", state.name().toLowerCase(Locale.ROOT));
-                event.put("detail", detail);
-                notifyListeners("linkState", event);
+            CantolConnection next = new CantolConnection(host, port, Base64.decode(heartbeat, Base64.DEFAULT), intervalMs, connectMs, new CantolConnection.Listener() {
+                @Override
+                public void onState(CantolConnection.State state, String detail) {
+                    JSObject event = new JSObject();
+                    event.put("state", state.name().toLowerCase(Locale.ROOT));
+                    event.put("detail", detail);
+                    notifyListeners("linkState", event);
+                }
+
+                @Override
+                public void onFrame(byte[] frame) {
+                    // Nobody is listening until a screen needs the stream: no work for the bridge until then.
+                    if (!hasListeners("frame")) return;
+                    JSObject event = new JSObject();
+                    event.put("dataB64", Base64.encodeToString(frame, Base64.NO_WRAP));
+                    notifyListeners("frame", event);
+                }
             });
             try {
                 double rtt = next.open();
@@ -160,6 +174,37 @@ public class CantolLinkPlugin extends Plugin {
             } catch (IOException | RuntimeException e) {
                 next.close();
                 fail(call, e);
+            }
+        });
+    }
+
+    /**
+     * Writes one frame, built by the app, on the held connection. Rejects with code `not_connected`
+     * when there is none or it is down, and `io` when the write fails.
+     */
+    @PluginMethod
+    public void send(PluginCall call) {
+        String data = call.getString("dataB64");
+        if (data == null) {
+            call.reject("dataB64 is required", "bad_request");
+            return;
+        }
+        CantolConnection link;
+        synchronized (this) {
+            link = connection;
+        }
+        if (link == null || !link.isUp()) {
+            call.reject("the Cantol link is not up", "not_connected");
+            return;
+        }
+        byte[] bytes = Base64.decode(data, Base64.DEFAULT);
+        pool.execute(() -> {
+            try {
+                link.send(bytes);
+                call.resolve();
+            } catch (IOException | RuntimeException e) {
+                lastError = "io: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+                call.reject(e.getMessage() == null ? "the frame could not be sent" : e.getMessage(), "io");
             }
         });
     }

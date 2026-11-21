@@ -1,5 +1,6 @@
 package id.cantol.mobile.link;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -32,6 +33,7 @@ final class FakeCantol implements AutoCloseable {
     private volatile Mode mode = Mode.ANSWER;
     private volatile int accepted;
     private volatile int received;
+    private final ByteArrayOutputStream receivedBytes = new ByteArrayOutputStream();
 
     FakeCantol() throws IOException {
         server = new ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"));
@@ -54,6 +56,42 @@ final class FakeCantol implements AutoCloseable {
 
     int received() {
         return received;
+    }
+
+    /** Everything the clients have written so far, in the order it arrived. */
+    synchronized byte[] receivedBytes() {
+        return receivedBytes.toByteArray();
+    }
+
+    /** A frame with the given kind and payload (the CRC is zero: the Java side does not check it). */
+    static byte[] frame(int kind, byte[] payload) {
+        byte[] out = new byte[FrameIo.HEADER_LEN + payload.length + FrameIo.CRC_LEN];
+        out[0] = 0x57;
+        out[1] = (byte) 0xCA;
+        out[2] = 1;
+        out[3] = (byte) kind;
+        out[FrameIo.LEN_OFFSET] = (byte) payload.length;
+        out[FrameIo.LEN_OFFSET + 1] = (byte) (payload.length >> 8);
+        System.arraycopy(payload, 0, out, FrameIo.HEADER_LEN, payload.length);
+        return out;
+    }
+
+    /**
+     * Sends bytes to every connected client now, in pieces of at most {@code piece} bytes a few
+     * milliseconds apart, as a slow network would. Like a real device it has one writer: its own
+     * answers to the heartbeat wait until the bytes have all gone, so they never land in the middle.
+     */
+    void emit(byte[] bytes, int piece) throws IOException, InterruptedException {
+        for (Socket client : clients) {
+            OutputStream out = client.getOutputStream();
+            synchronized (out) {
+                for (int at = 0; at < bytes.length; at += piece) {
+                    out.write(bytes, at, Math.min(piece, bytes.length - at));
+                    out.flush();
+                    if (piece < bytes.length) Thread.sleep(5);
+                }
+            }
+        }
     }
 
     /** Hangs up on every connected client at once. */
@@ -89,10 +127,17 @@ final class FakeCantol implements AutoCloseable {
             OutputStream out = client.getOutputStream();
             int n;
             while ((n = in.read(buf)) >= 0) {
-                if (n > 0) received++;
+                if (n > 0) {
+                    received++;
+                    synchronized (this) {
+                        receivedBytes.write(buf, 0, n);
+                    }
+                }
                 if (mode == Mode.ANSWER) {
-                    out.write(FRAME);
-                    out.flush();
+                    synchronized (out) {
+                        out.write(FRAME);
+                        out.flush();
+                    }
                 }
             }
         } catch (IOException ignored) {
