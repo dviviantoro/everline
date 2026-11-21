@@ -33,9 +33,9 @@ Wizard states are the ones in `mobile-app.md`, with two amendments recorded in A
 | 3 | `Pairing.dc.html` | `/setup/cantol` | `CANTOL_DISCOVER`, `CANTOL_PING` | TASK-005 | `CantolLink` (found, HELLO/PONG, RTT) | none | Built with the 60 s help card, manual address and diagnostics, on a simulated `CantolLink`. Real discovery and handshake remain (TASK-005, ADR-005). |
 | 4 | `Location.dc.html` | `/setup/gps` | `LOCATION` | TASK-005 | `GnssHelper`, `@capacitor/geolocation` | none | Built with denied, blocked, services-off and poor-fix states, on a simulated `Gnss`. Real permission, dialog and fixes remain (TASK-005). |
 | 5 | `Connect.dc.html` | `/device` | `STREAMING`, `READY` | TASK-005 | all of the above | none | Built (TASK-015). Rows turn into warnings during the 30 s recovery. |
-| 6 | `Live.dc.html` | `/live` | `READY` | TASK-006 | `cantol-wasm` Session (events, summary) | none | Built on simulated pulses with the real fields. The live pipeline and the decision on where detection runs remain (TASK-006). |
+| 6 | `Live.dc.html` | `/live` | `READY` | TASK-006 | `cantol-wasm` Session (events, summary) | none | Built on simulated pulses with the real fields (demo), and on the real link with test data (field build, ADR-010): a "Test data" banner when the status says so, a retry when Start cannot be sent, "Waiting for data" after 5 s of silence. The decision on where detection runs and the real calibration remain (TASK-006). |
 | 6b | `TrackSetup.dc.html` | `/track/setup` | `READY` | TASK-011 | `GET /api/assets?type=line`, `GET /api/assets/{id}/measurement-points` | none | Built (TASK-015), with resume of an unfinished walk. Field-tested thresholds remain (TASK-011). |
-| 6c | `Tracking.dc.html` | `/track` | `READY` | TASK-011 | live Session, GPS | local session | Built; rules in `cantol-dsp` with golden vectors, on simulated sources. Field-tested thresholds remain (TASK-011). |
+| 6c | `Tracking.dc.html` | `/track` | `READY` | TASK-011 | live Session, GPS | local session | Built; rules in `cantol-dsp` with golden vectors, on simulated sources. Field-tested thresholds remain (TASK-011). The field build serves it as a **free walk** without a line (ADR-011): marks M1, M2, ..., nothing saved. |
 | 7 | `Tag.dc.html` | `/tag` | `READY` | TASK-007 | assets, measurement points, GPS | Dexie, then `POST /api/uploads`, `POST /api/assets/{id}/pd-surveys` | Built on a simulated `SurveyApi`, except the photo (`TODO(TASK-007)`). The real upload and CORS remain (TASK-007, TASK-008). |
 | 8 | `Surveys.dc.html` | `/surveys` | none | TASK-007 (list), TASK-009 (queue states) | Dexie | retry upload | Built: Saved, Uploaded, Failed with Retry. The sync queue banner remains (TASK-009). |
 
@@ -58,7 +58,7 @@ Guards, in order: no operator name stored then `/login`; wizard not at `READY` t
 ### 3.2 `/setup/hotspot` (screen 2, step 1 of 3)
 
 - Content: title "Turn on your hotspot.", a card "Set your hotspot to" with network name, band (2.4 GHz) and password (masked, Copy button), an Off/On status pill, primary "Open hotspot settings", then "Continue".
-- Values come from the gitignored device profile (`mobile/config/device-profile.local.json`) through the single loader function in ADR-003. The mock's "EverLine-PD" is a placeholder. The password is displayed to the operator and never sent anywhere or logged.
+- Values: the demo build shows placeholders (the mock's "EverLine-PD" is one). The **field build** shows what the operator typed from the Cantol's label on `/setup/device` (ADR-009: hotspot name, password, MAC address; asked once, kept on the phone, editable from this screen by "Not what the Cantol label says? Change"), and the MAC address below the name and band. The device profile now holds only the band and the ports. The password is displayed to the operator and never sent anywhere or logged.
 - "Open hotspot settings" calls `HotspotAssistant` and walks its ordered intent table (ADR-003, strategy S3). Status On/Off comes from strategy S0 (an up AP-style interface with a site-local IPv4). Detection is best effort: allow "Continue anyway", because the final proof is Cantol reachability on the next screen.
 - Setup card reminders from ADR-003: 2.4 GHz, hotspot auto-off disabled, phone Wi-Fi client off.
 
@@ -78,14 +78,15 @@ Guards, in order: no operator name stored then `/login`; wizard not at `READY` t
 ### 3.5 `/device` (screen 5, "Ready to measure.")
 
 - Rows: Hotspot (name, band, On), Cantol (address, RTT, Connected), Location (accuracy, On). Each row reflects live state and turns into an actionable warning if lost.
-- Primary "Start measurement" goes to `/live` and sends the Start frame to Cantol.
+- Primary "Start measurement" goes to `/live`; the Live screen sends the Start frame to Cantol (and says so, with a retry, if it cannot).
 
 ### 3.6 `/live` (screen 6)
 
 - Header: "Live PD", sub-line with the Cantol device id and RTT, a Connected pill. Segmented control "Spot reading | Tracking mode" (the second goes to `/track/setup`).
 - Plot: phase-resolved PD (PRPD), 0 to 360 degrees against calibrated dBmV, from `PdEvent.phase` (0..65535 maps to 0..360 degrees) and `amp_counts` after calibration. The chip "Ref locked" is `Status.flags` bit `STATUS_MAINS_LOCK`. If not locked, phase is meaningless: show "Ref not locked" and hide the phase plot, keep the numeric tiles.
 - Tiles: Peak (window maximum, dBmV), Rate (`Status.trigger_rate_hz`, per second), Noise (`Status.noise_floor_counts`, calibrated to dBmV).
-- Dependency: this screen needs pulse events with phase, so it depends on the decision gate before TASK-006 (where detection runs). If Cantol only sends final numbers, drop the plot and keep the tiles.
+- Dependency: this screen needs pulse events with phase, so it depends on the decision gate before TASK-006 (where detection runs). If Cantol only sends final numbers, drop the plot and keep the tiles. The field build (ADR-010) assumes the Cantol detects and sends `PdEvent` batches, and shows the stream from a device that says its data is generated (`Status.flags` bit `STATUS_SYNTHETIC`) under a banner, "Test data. The Cantol says these numbers are generated, not measured."
+- A build without the survey server (`AppConfig.surveysNote`) has no "Record 60 s": the note replaces it, the tab bar has Device and Live only, and "Tracking mode" opens the free walk (`/track`, ADR-011). When the device reports more than one sensor, a Sensor selector (All, 1, 2, 3) sits above the plot and the plot and tiles follow it.
 - "Record 60 s": the phone computes a 60 s window summary and its severity (`cantol-dsp`), builds a `Measurement` (summary, severity, GPS snapshot) in Dexie, then goes to `/tag`.
 - "Capture waveform" is **deferred**: the protocol has a `Waveform` frame but the API and `pd_readings` have no field for it. Do not ship the button until a destination exists.
 
@@ -135,7 +136,7 @@ Save writes to Dexie first. Phase 4 uploads online only; offline retry waits for
 | Photo, temperature | absent | optional fields exist | Add optional rows on Tag (design backlog). |
 | Sign in | email and password | UI gate, no backend | Keep as a gate. |
 | Waveform capture | button on Live | no API field | Defer. |
-| Hotspot name | "EverLine-PD" | from device profile | Placeholder only. |
+| Hotspot name | "EverLine-PD" | typed by the operator from the Cantol label (field build, ADR-009) | Placeholder only in the demo. |
 | Fonts and colours | Big Shoulders, IBM Plex Sans, IBM Plex Mono and tokens equal to `apps/app/globals.css` | same | Matches after the 2026-10-21 correction. Light palette is new (needs approval, ADR-006). |
 | Marks | M1 to M4 at 45 m spacing | a span has three measurement points at 25, 50, 75 percent, between poles A and B | See `mobile-tracking-mode.md`. |
 

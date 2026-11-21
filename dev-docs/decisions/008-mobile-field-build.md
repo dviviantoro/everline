@@ -6,6 +6,8 @@
 
 Proposed — 2026-10-25. The user asked for the MVP of the connection wizard (TASK-005); the design choices below were made while building it and are for the user to accept or change. Not run on a phone yet.
 
+Decision 8 (the device profile holds the hotspot name and password) is replaced by ADR-009 (2026-11-04): the operator types them from the Cantol label, and the profile keeps only the band and the ports.
+
 ---
 
 ## Context
@@ -26,7 +28,7 @@ Proposed — 2026-10-25. The user asked for the MVP of the connection wizard (TA
 4. **Discovery and the held link.** Order as in ADR-003: the last address that worked; then the UDP beacon and a scan of the hotspot subnet together; then a manual address. Whatever is found is only a candidate until it answers a HELLO with a PONG that echoes the phone's nonce. The held connection sends a PING frame every 2 s and counts any frame back as proof of life; after one silent interval it reports `lost` once and reconnects by itself, reporting `up`. While that link is healthy, a ping from the app reuses it instead of opening a second connection.
 5. **GPS.** Fixes and the permission come from `@capacitor/geolocation`. A small app plugin, `GnssHelper`, answers "are location services on" and opens the location and app settings screens. The Play Services dialog that turns location on without leaving the app is not used.
 6. **Java, not Kotlin.** ADR-002 and ADR-003 say Kotlin. The code is Java because the project has no Kotlin Gradle plugin and its only native file is Java; the plugin classes are thin and moving them to Kotlin later is mechanical. This is a change of wording in those ADRs, not of design.
-7. **This build cannot measure.** The live stream is TASK-006 and is gated on the open decision about where pulse detection runs; upload is TASK-007. `AppConfig.measurementNote`, when set, disables "Start measurement" with a plain note, hides the tab bar and redirects the measurement routes to the Ready screen.
+7. **This build cannot measure.** The live stream is TASK-006 and is gated on the open decision about where pulse detection runs; upload is TASK-007. `AppConfig.measurementNote`, when set, disables "Start measurement" with a plain note, hides the tab bar and redirects the measurement routes to the Ready screen. *(Amended 2026-11-04 by ADR-010: the field build now streams and shows the Live screen, fed by a device that sends test data. `measurementNote` was replaced by `surveysNote`, which withholds only Record, Tag, Tracking and Surveys. Upload (TASK-007) and the decision gate are unchanged.)*
 8. **The device profile** is `mobile/config/device-profile.local.json` (gitignored) or, failing that, the committed example, read at build time through one function. The password is inside the APK, because the operator is shown it; an APK built with a real profile is not for sharing.
 
 Alternatives considered:

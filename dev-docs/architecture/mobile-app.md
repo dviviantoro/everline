@@ -12,7 +12,10 @@
 | `mobile/` shell with the WASM self-test, debug APK | Done; self-test passes in Chromium and on one phone (Samsung SM-A127F, Android 13, WebView Chrome 155) |
 | Screens, wizard reducer, guards, local store (Dexie), survey payload, tracking rules (WASM) | Done on simulated sources: the demo build (TASK-015, ADR-007; `mobile/src/core` holds the interfaces, `mobile/src/demo` the simulations) |
 | Native plugins `HotspotAssistant`, `CantolLink`, `GnssHelper` (in Java), TypeScript adapters, device profile, field build | Built on branch `feat/task-005-field-wizard` (ADR-008, Proposed); run against `cantol-mock` and a scripted phone, **not on a phone** |
-| Live stream, real upload and photo | Not started (TASK-006, TASK-007) |
+| First-run "Cantol label" screen (hotspot name, password, MAC address typed on the phone), MAC check of the connected device, and `mobile/device/cantol-pingpong.sh` for the Cantol side | Built 2026-11-04 (ADR-009, Proposed); the script is tested against the app's own Rust protocol code; **not run on a Red Pitaya or a phone** |
+| Live stream on the field build: Start/Stop on the held link, frames forwarded by the Java plugin, decoded to dBmV in Rust, the Live screen with a "Test data" banner, and a synthetic stream from `cantol-pingpong.sh` | Built 2026-11-04 (ADR-010, Proposed); tested against the app's Rust code, the real mock and a browser stand-in; **not run on a phone or the Red Pitaya**. It does not settle the decision gate of TASK-006 (where detection runs) or ADR-005; the calibration is a placeholder |
+| The Cantol measurement software for the four-input Red Pitaya (`mobile/device/cantol_device`: pulse detection on three sensors, phase from a mains reference on channel 1, a simulated source, a SCPI source), sensors in the protocol and on the Live screen, and Tracking as a free walk | Built 2026-11-06 (ADR-011, Proposed); tested against the simulator's ground truth and the app's own protocol code; **the SCPI source and the program have not run on a board** |
+| Real upload and photo; Record, Tag and Surveys in the field build | Not started (TASK-007); the field build withholds them (`surveysNote`) |
 
 ## How the WASM module is loaded
 
@@ -35,7 +38,9 @@ Android field-capture app for the Cantol PD measuring unit: bring up a link to C
 ```
 mobile/
   package.json  vite.config.ts  capacitor.config.ts  .env.example  .gitignore
-  config/device-profile.example.json      (device-profile.local.json is gitignored)
+  config/device-profile.example.json      (band and ports; device-profile.local.json is gitignored)
+  device/       cantol-pingpong.sh        (runs ON the Cantol: network search and the device side of the link; see docs/operations/cantol-pingpong.md)
+                cantol_device/            (runs ON the Cantol: the measurement program, Python + numpy; see docs/operations/cantol-device.md, ADR-011)
   scripts/      env.sh  build-wasm.sh  android-build.sh  check-no-secrets.sh
   rust/         Cargo.toml  rust-toolchain.toml
     cantol-proto/   frames, CRC32, FrameDecoder (resync), loss tracker; shared with cantol-mock
@@ -65,10 +70,10 @@ Capacitor facts that shape this (read in 8.3.4 source): plugin methods share one
 | Plugin | Responsibility |
 |---|---|
 | `HotspotAssistant` | Hotspot-on detection (S0) and opening the system hotspot settings from an ordered table (S3). The flag-gated custom local-only hotspot spike (S1) and the capabilities probe are not built |
-| `CantolLink` | Transport primitives: `scan` (the hotspot /24 on the data port), `listenBeacon`, `exchange` (send one frame, read one), `connect` and `disconnect` (a held socket with a heartbeat and its own reconnect), `linkStatus`, the last known address, `diagnostics`; event `linkState` (`up`, `lost`). Built: no `rx` or `stats` events yet (TASK-006). The discovery order and the HELLO/PONG check are in `src/native/fieldLink.ts`, not in the plugin |
+| `CantolLink` | Transport primitives: `scan` (the hotspot /24 on the data port), `listenBeacon`, `exchange` (send one frame, read one), `connect` and `disconnect` (a held socket with a heartbeat and its own reconnect), `linkStatus`, the last known address, `diagnostics`; `send` (write one frame the app built, Start or Stop, on the held link); events `linkState` (`up`, `lost`) and `frame` (one whole frame as base64, emitted only while the app listens for it; ADR-010). The discovery order, the HELLO/PONG check and the stream (Start/Stop, decoding, asking again after a reconnect) are in `src/native/fieldLink.ts`, not in the plugin |
 | `GnssHelper` | Whether location services are on, and the location and app settings screens (no Play Services dialog); GPS fixes and the permission come from `@capacitor/geolocation` |
 
-Built in **Java** (`mobile/android/app/src/main/java/id/cantol/mobile`), not Kotlin as ADR-002 and ADR-003 say: the project has no Kotlin Gradle plugin. A pure-Java core in `link/` (no Android classes, tested under JUnit) does the transport; the three Capacitor plugin classes in `plugins/` are thin. The phone's side of the protocol (HELLO, PING, decoding PONG and the beacon) is `cantol-proto/src/handshake.rs`, exported through the WASM, so Java never reads a message. See ADR-008 and `mobile/docs/operations/field-build.md`.
+Built in **Java** (`mobile/android/app/src/main/java/id/cantol/mobile`), not Kotlin as ADR-002 and ADR-003 say: the project has no Kotlin Gradle plugin. A pure-Java core in `link/` (no Android classes, tested under JUnit) does the transport; the three Capacitor plugin classes in `plugins/` are thin. The phone's side of the protocol (HELLO, PING, Start, Stop, decoding PONG and the beacon) is `cantol-proto/src/handshake.rs`, and the reading of status and pulse frames with the calibration to dBmV is `cantol-wasm/src/stream.rs` over `cantol-dsp::calibration`, all exported through the WASM, so Java never reads a message. See ADR-008 and `mobile/docs/operations/field-build.md`.
 
 ## Connection wizard
 
@@ -76,7 +81,7 @@ States: `PERMS` -> `HOTSPOT_CHECK` -> `HOTSPOT_GUIDE` -> `CANTOL_DISCOVER` -> `C
 
 ## Device profile and secrets
 
-SSID, password, band and ports come from `config/device-profile.local.json` (gitignored), loaded at build time through one function. Only `device-profile.example.json` is committed. The API key lives in the gitignored `.env.local`. The repo is on GitHub: treat every committed file as public.
+Band and ports come from `config/device-profile.local.json` (gitignored) or, failing that, the committed `device-profile.example.json`, loaded at build time through one function. **The hotspot name, password and the Cantol's MAC address are not in the build**: the operator types them from the Cantol's label on the phone the first time (ADR-009) and the app keeps them in its own storage. The API key lives in the gitignored `.env.local`. The repo is on GitHub: treat every committed file as public.
 
 ## Upload contract
 

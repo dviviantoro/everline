@@ -23,6 +23,8 @@
 
 ## Recommended Reading Order
 
+**Picking this up on a different computer, or after the Red Pitaya and Analog Discovery 2 work of 2026-11-21 and 2026-11-22? Read `dev-docs/ai/MACHINE_HANDOFF.md` first** (what is not in git, how to set the machine up, what works and what does not, the order to proceed).
+
 1. `dev-docs/ai/FINAL_SYSTEM_HANDOVER.md` — the current state in one place (rewritten 2026-10-21)
 2. `dev-docs/ai/TASKS.md` — active work and its order
 3. `dev-docs/ai/KNOWN_ISSUES.md` and `dev-docs/ai/TECHNICAL_DEBT.md`

@@ -113,3 +113,10 @@ Marks that were never taken (the operator skipped a station) are simply absent; 
 ## 7) Out of scope
 
 Automatic detection of the strongest point, localisation by triangulation, cable-length estimates and time-of-flight distance. The feature only compares magnitudes along a known span.
+
+---
+
+## Addendum (ADR-011, 2026-11-06): the free walk
+
+The field build has no survey server, so no line asset to walk along. It serves `/track` as a **free walk**: no setup screen, no asset, no direction, no GPS-distance source. The operator taps "Mark station" at each stop; the marks are M1, M2, ... (up to 12, `core/freeWalk.ts`). Everything in section 3 holds with `Sample` taken over all sensors, with one change: in a second with no pulses the sample is the noise floor, so that walking away from a source falls instead of freezing on the last pulse (the span walk keeps the last value; see TECHNICAL_DEBT). Marks show the distance to the previous one when both had a GPS fix. The walk is not saved or uploaded. The span walk and its screens are unchanged for a build with the survey server.
+
