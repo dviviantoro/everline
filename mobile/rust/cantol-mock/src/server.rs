@@ -136,7 +136,7 @@ fn beacon_loop(cfg: &Config, tcp_port: u16, stop: &AtomicBool) {
         tcp_port,
         fw: cfg.fw,
     }
-    .encode();
+    .encode_with_mac(cfg.mac);
     let target = format!("{}:{}", cfg.beacon_target, cfg.beacon_port);
     while !stop.load(Ordering::Relaxed) {
         let _ = socket.send_to(&packet, &target);

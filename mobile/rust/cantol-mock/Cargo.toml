@@ -17,5 +17,9 @@ path = "src/main.rs"
 [dependencies]
 cantol-proto.workspace = true
 
+[dev-dependencies]
+# The device-script test reads the data it makes back through the app's calibration.
+cantol-dsp.workspace = true
+
 [lints]
 workspace = true

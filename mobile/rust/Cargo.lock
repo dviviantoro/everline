@@ -16,6 +16,7 @@ version = "0.1.0"
 name = "cantol-mock"
 version = "0.1.0"
 dependencies = [
+ "cantol-dsp",
  "cantol-proto",
 ]
 

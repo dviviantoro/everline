@@ -11,6 +11,8 @@ use cantol_proto::report::decode_report;
 use cantol_proto::{FrameDecoder, PROTO_VERSION};
 use wasm_bindgen::prelude::*;
 
+mod stream;
+
 /// Build identity shown on the self-test screen.
 #[wasm_bindgen]
 pub fn version() -> String {
@@ -86,6 +88,25 @@ pub fn encode_hello(nonce: u32, phone_epoch_ms: f64) -> Vec<u8> {
 #[wasm_bindgen]
 pub fn encode_ping(seq: u32) -> Vec<u8> {
     handshake::ping_frame(seq)
+}
+
+/// The Start frame: Cantol then sends pulses and a status about once a second until it gets a Stop.
+#[wasm_bindgen]
+pub fn encode_start(seq: u32) -> Vec<u8> {
+    handshake::start_frame(seq)
+}
+
+/// The Stop frame: Cantol stops sending pulses; the link stays up.
+#[wasm_bindgen]
+pub fn encode_stop(seq: u32) -> Vec<u8> {
+    handshake::stop_frame(seq)
+}
+
+/// JSON for one frame that arrived while streaming (a status or a batch of pulses, amplitudes in
+/// dBmV), or `{"error":"..."}`; see `stream::stream_report`.
+#[wasm_bindgen]
+pub fn decode_stream_frame(bytes: &[u8]) -> String {
+    stream::stream_report(bytes)
 }
 
 /// JSON for the answer to a HELLO (a PONG), or `{"error":"..."}`; see `handshake::pong_report`.
@@ -211,6 +232,8 @@ mod tests {
         for (bytes, kind) in [
             (encode_hello(7, 1.76e12), Kind::Hello),
             (encode_ping(3), Kind::Ping),
+            (encode_start(4), Kind::Start),
+            (encode_stop(5), Kind::Stop),
         ] {
             let mut session = Session::new();
             assert_eq!(session.push(&bytes), 1, "{kind:?}");
@@ -219,6 +242,8 @@ mod tests {
         assert!(decode_pong(&encode_hello(7, 1.0)).contains("unexpected_frame"));
         assert_eq!(decode_pong(&[]), "{\"error\":\"no_frame\"}");
         assert_eq!(decode_beacon(b"nope"), "{\"error\":\"not_a_beacon\"}");
+        assert_eq!(decode_stream_frame(&[]), "{\"error\":\"no_frame\"}");
+        assert!(decode_stream_frame(&encode_ping(1)).contains("\"frame_kind\":48"));
     }
 
     #[test]

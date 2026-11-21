@@ -1,4 +1,5 @@
-//! The phone's side of connecting: the frames it sends, and plain-text reports of what comes back.
+//! The phone's side of connecting: the frames it sends (HELLO, keep-alive, Start, Stop), and plain-text
+//! reports of what comes back to a HELLO.
 //!
 //! The Android plugin only moves bytes, so it needs ready-made frames to send and the answers
 //! decoded for it. This is that part: pure Rust, tested natively, exported through the WASM
@@ -8,7 +9,7 @@ use std::fmt::Write as _;
 
 use crate::decoder::FrameDecoder;
 use crate::frame::{Kind, PROTO_VERSION, encode_frame};
-use crate::msg::{Beacon, Hello, Pong};
+use crate::msg::{Beacon, Hello, MAC_LEN, Pong};
 
 fn frame(kind: Kind, seq: u32, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
@@ -38,6 +39,17 @@ pub fn ping_frame(seq: u32) -> Vec<u8> {
     frame(Kind::Ping, seq, &[])
 }
 
+/// Asks Cantol to start sending `PdEvent` batches (and a `Status` about once a second). The
+/// payload is empty in this placeholder protocol: there is nothing to configure yet.
+pub fn start_frame(seq: u32) -> Vec<u8> {
+    frame(Kind::Start, seq, &[])
+}
+
+/// Asks Cantol to stop sending `PdEvent` batches. The link stays up and keeps answering pings.
+pub fn stop_frame(seq: u32) -> Vec<u8> {
+    frame(Kind::Stop, seq, &[])
+}
+
 /// Printable ASCII up to the first NUL; anything else (and the two characters JSON would need
 /// to escape) becomes `?`. A device id is shown to the operator, so it must not break the report.
 fn text(bytes: &[u8]) -> String {
@@ -54,14 +66,25 @@ fn text(bytes: &[u8]) -> String {
         .collect()
 }
 
+/// `"AA:BB:CC:DD:EE:FF"` in quotes, or `null` when the device did not report one.
+fn mac_json(mac: Option<[u8; MAC_LEN]>) -> String {
+    match mac {
+        Some(m) => format!(
+            "\"{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}\"",
+            m[0], m[1], m[2], m[3], m[4], m[5]
+        ),
+        None => "null".to_string(),
+    }
+}
+
 fn error(code: &str) -> String {
     format!("{{\"error\":\"{code}\"}}")
 }
 
 /// Decode the answer to a HELLO: the first valid frame in `bytes`.
 ///
-/// `{"proto":1,"caps":3,"fw":"0.1.0","device_id":"RP-MOCK","cantol_epoch_ms":1,"nonce":7}`, or an
-/// error: `no_frame` (nothing complete and valid), `device_error` (Cantol refused, with its
+/// `{"proto":1,"caps":3,"fw":"0.1.0","device_id":"RP-MOCK","cantol_epoch_ms":1,"nonce":7,"mac":"00:26:32:F0:1A:BC"}`
+/// (`"mac":null` when the device did not report its MAC address), or an error: `no_frame` (nothing complete and valid), `device_error` (Cantol refused, with its
 /// `code`), `bad_pong`, or `unexpected_frame`.
 pub fn pong_report(bytes: &[u8]) -> String {
     let mut decoder = FrameDecoder::new();
@@ -76,7 +99,7 @@ pub fn pong_report(bytes: &[u8]) -> String {
                     let mut out = String::new();
                     let _ = write!(
                         out,
-                        "{{\"proto\":{},\"caps\":{},\"fw\":\"{}.{}.{}\",\"device_id\":\"{}\",\"cantol_epoch_ms\":{},\"nonce\":{}}}",
+                        "{{\"proto\":{},\"caps\":{},\"fw\":\"{}.{}.{}\",\"device_id\":\"{}\",\"cantol_epoch_ms\":{},\"nonce\":{},\"mac\":{}}}",
                         p.proto,
                         p.caps,
                         p.fw[0],
@@ -84,7 +107,8 @@ pub fn pong_report(bytes: &[u8]) -> String {
                         p.fw[2],
                         text(&p.device_id),
                         p.cantol_epoch_ms,
-                        p.nonce
+                        p.nonce,
+                        mac_json(Pong::mac_of(f.payload))
                     );
                     out
                 }
@@ -100,18 +124,21 @@ pub fn pong_report(bytes: &[u8]) -> String {
     report.unwrap_or_else(|| error("no_frame"))
 }
 
-/// Decode one UDP discovery beacon: `{"proto":1,"device_id":"RP-MOCK","tcp_port":47000,"fw":"0.1.0"}`,
-/// or `{"error":"not_a_beacon"}` for anything else that arrives on the port.
+/// Decode one UDP discovery beacon:
+/// `{"proto":1,"device_id":"RP-MOCK","tcp_port":47000,"fw":"0.1.0","mac":"00:26:32:F0:1A:BC"}`
+/// (`"mac":null` when it carries none), or `{"error":"not_a_beacon"}` for anything else that
+/// arrives on the port.
 pub fn beacon_report(datagram: &[u8]) -> String {
     match Beacon::decode(datagram) {
         Ok(b) => format!(
-            "{{\"proto\":{},\"device_id\":\"{}\",\"tcp_port\":{},\"fw\":\"{}.{}.{}\"}}",
+            "{{\"proto\":{},\"device_id\":\"{}\",\"tcp_port\":{},\"fw\":\"{}.{}.{}\",\"mac\":{}}}",
             b.proto,
             text(&b.device_id),
             b.tcp_port,
             b.fw[0],
             b.fw[1],
-            b.fw[2]
+            b.fw[2],
+            mac_json(Beacon::mac_of(datagram))
         ),
         Err(_) => error("not_a_beacon"),
     }
@@ -168,11 +195,21 @@ mod tests {
     }
 
     #[test]
+    fn start_and_stop_are_empty_control_frames_of_their_own_kind() {
+        for (bytes, kind) in [(start_frame(4), Kind::Start), (stop_frame(5), Kind::Stop)] {
+            assert_eq!(bytes.len(), HEADER_LEN + CRC_LEN, "{kind:?}");
+            let (got, payload) = decode_one(&bytes);
+            assert_eq!(got, kind as u8);
+            assert!(payload.is_empty());
+        }
+    }
+
+    #[test]
     fn pong_report_describes_the_answer_exactly() {
         let report = pong_report(&pong_frame(*b"RP-MOCK\0", 7));
         assert_eq!(
             report,
-            "{\"proto\":1,\"caps\":3,\"fw\":\"0.1.0\",\"device_id\":\"RP-MOCK\",\"cantol_epoch_ms\":1760000000000,\"nonce\":7}"
+            "{\"proto\":1,\"caps\":3,\"fw\":\"0.1.0\",\"device_id\":\"RP-MOCK\",\"cantol_epoch_ms\":1760000000000,\"nonce\":7,\"mac\":null}"
         );
     }
 
@@ -235,7 +272,7 @@ mod tests {
         };
         assert_eq!(
             beacon_report(&beacon.encode()),
-            "{\"proto\":1,\"device_id\":\"RP-MOCK\",\"tcp_port\":47000,\"fw\":\"0.1.0\"}"
+            "{\"proto\":1,\"device_id\":\"RP-MOCK\",\"tcp_port\":47000,\"fw\":\"0.1.0\",\"mac\":null}"
         );
         assert_eq!(beacon_report(b"hello"), error("not_a_beacon"));
         assert_eq!(
@@ -244,5 +281,53 @@ mod tests {
             "right size, wrong magic"
         );
         assert_eq!(beacon_report(&[]), error("not_a_beacon"));
+    }
+
+    #[test]
+    fn pong_and_beacon_reports_carry_the_mac_address_when_there_is_one() {
+        let pong = Pong {
+            proto: 1,
+            caps: 0b11,
+            fw: [0, 1, 0],
+            device_id: *b"RP-MOCK\0",
+            cantol_epoch_ms: 1,
+            nonce: 7,
+        };
+        let bytes = frame(
+            Kind::Pong,
+            0,
+            &pong.encode_with_mac([0x00, 0x26, 0x32, 0xF0, 0x1A, 0xBC]),
+        );
+        let report = pong_report(&bytes);
+        assert!(
+            report.ends_with(",\"nonce\":7,\"mac\":\"00:26:32:F0:1A:BC\"}"),
+            "{report}"
+        );
+
+        let beacon = Beacon {
+            proto: 1,
+            device_id: *b"RP-MOCK\0",
+            tcp_port: 47000,
+            fw: [0, 1, 0],
+        };
+        let report = beacon_report(&beacon.encode_with_mac([0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F]));
+        assert!(
+            report.ends_with(",\"mac\":\"0A:0B:0C:0D:0E:0F\"}"),
+            "{report}"
+        );
+    }
+
+    #[test]
+    fn an_all_zero_mac_is_reported_as_no_mac() {
+        let pong = Pong {
+            proto: 1,
+            caps: 0,
+            fw: [0, 1, 0],
+            device_id: *b"X\0\0\0\0\0\0\0",
+            cantol_epoch_ms: 1,
+            nonce: 1,
+        };
+        let report = pong_report(&frame(Kind::Pong, 0, &pong.encode_with_mac([0; MAC_LEN])));
+        assert!(report.ends_with("\"mac\":null}"), "{report}");
     }
 }

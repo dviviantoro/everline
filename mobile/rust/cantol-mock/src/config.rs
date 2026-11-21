@@ -19,7 +19,12 @@ pub struct Config {
     /// Close each connection after this many seconds (0 = never).
     pub disconnect_every_s: u64,
     pub device_id: [u8; 8],
+    /// The MAC address the mock reports in its PONG and beacon, as a real unit reports its own.
+    pub mac: [u8; 6],
     pub fw: [u8; 3],
+    /// How many sensors the mock pretends to have. With more than one, pulses cycle through them and
+    /// every status carries per-sensor figures.
+    pub sensors: u8,
 }
 
 impl Default for Config {
@@ -36,7 +41,10 @@ impl Default for Config {
             corrupt_pct: 0.0,
             disconnect_every_s: 0,
             device_id: *b"RP-MOCK\0",
+            // Locally administered (bit 1 of the first byte), so it cannot be a real vendor's address.
+            mac: [0x02, 0xCA, 0x57, 0x00, 0x00, 0x01],
             fw: [0, 1, 0],
+            sensors: 1,
         }
     }
 }

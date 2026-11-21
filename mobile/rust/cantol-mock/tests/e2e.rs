@@ -91,6 +91,23 @@ fn hello_is_answered_with_a_pong_echoing_the_nonce() {
     assert_eq!(&pong.device_id, b"RP-MOCK\0");
 }
 
+/// The unit proves which one it is: its MAC address is in the PONG and in the beacon, and a
+/// configured address is reported as given.
+#[test]
+fn the_mock_reports_its_mac_address_in_the_pong_and_the_beacon() {
+    use cantol_proto::handshake::pong_report;
+
+    let mut cfg = quiet_config();
+    cfg.mac = [0x00, 0x26, 0x32, 0xF0, 0x1A, 0xBC];
+    let mock = spawn(cfg).unwrap();
+    let mut stream = connect(mock.addr());
+    send(&mut stream, Kind::Hello, &hello());
+    let mut buf = [0u8; 256];
+    let n = stream.read(&mut buf).unwrap();
+    let report = pong_report(&buf[..n]);
+    assert!(report.contains("\"mac\":\"00:26:32:F0:1A:BC\""), "{report}");
+}
+
 /// The bytes the phone's plugin will really send and the report the app will really read, against
 /// the live mock: nothing here is re-encoded by hand.
 #[test]
@@ -252,4 +269,24 @@ fn beacon_announces_the_real_tcp_port() {
     let beacon = Beacon::decode(&buf[..n]).unwrap();
     assert_eq!(beacon.tcp_port, mock.addr().port());
     assert_eq!(&beacon.device_id, b"RP-MOCK\0");
+    assert_eq!(
+        Beacon::mac_of(&buf[..n]),
+        Some([0x02, 0xCA, 0x57, 0x00, 0x00, 0x01]),
+        "the beacon carries the unit's MAC address"
+    );
+}
+
+#[test]
+fn every_status_says_the_data_is_generated() {
+    let mock = spawn(quiet_config()).unwrap();
+    let mut stream = connect(mock.addr());
+    send(&mut stream, Kind::Hello, &hello());
+    let (frames, _, _) = read_until(&mut stream, Duration::from_millis(600), |_| false);
+    let status = frames
+        .iter()
+        .find(|x| x.0 == Kind::Status as u8)
+        .expect("a status within 0.6 s");
+    let flags = cantol_proto::msg::Status::decode(&status.1).unwrap().flags;
+    assert_ne!(flags & cantol_proto::msg::STATUS_SYNTHETIC, 0);
+    assert_ne!(flags & cantol_proto::msg::STATUS_MAINS_LOCK, 0);
 }

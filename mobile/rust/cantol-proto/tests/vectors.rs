@@ -110,6 +110,7 @@ fn typical(i: u32, rng: &mut Rng) -> (Kind, Vec<u8>) {
                     phase: rng.range(0, 65_535) as u16,
                     width_ns: rng.range(40, 600) as u16,
                     polarity: (k % 2) as u8,
+                    channel: 0,
                 })
                 .collect();
             let mut payload = Vec::new();

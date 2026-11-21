@@ -5,7 +5,9 @@ use std::io::{self, Write};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use cantol_proto::frame::{FrameRef, Kind, PROTO_VERSION, encode_frame};
-use cantol_proto::msg::{Hello, PdEvent, Pong, STATUS_MAINS_LOCK, Status, encode_pd_events};
+use cantol_proto::msg::{
+    Hello, PdEvent, Pong, STATUS_MAINS_LOCK, STATUS_SYNTHETIC, SensorStat, Status, encode_pd_events,
+};
 
 use crate::config::Config;
 use crate::rng::Rng;
@@ -52,7 +54,7 @@ impl<'a> Link<'a> {
             Some(Kind::Start) => self.streaming = true,
             Some(Kind::Stop) => self.streaming = false,
             // The phone's keep-alive: answer at once so it sees traffic even between statuses.
-            Some(Kind::Ping) => out.push((Kind::Status, self.status().encode().to_vec())),
+            Some(Kind::Ping) => out.push((Kind::Status, self.status_payload())),
             _ => {}
         }
     }
@@ -69,14 +71,14 @@ impl<'a> Link<'a> {
             cantol_epoch_ms: epoch_ms(),
             nonce: hello.nonce,
         };
-        (Kind::Pong, pong.encode().to_vec())
+        (Kind::Pong, pong.encode_with_mac(self.cfg.mac).to_vec())
     }
 
     /// Queue whatever periodic messages are due at `now` (time since the connection opened).
     pub fn tick(&mut self, now: Duration, out: &mut Outgoing) {
         if now >= self.next_status {
             self.next_status = now + STATUS_PERIOD;
-            out.push((Kind::Status, self.status().encode().to_vec()));
+            out.push((Kind::Status, self.status_payload()));
         }
         if self.streaming && now >= self.next_pd {
             self.next_pd = now + PD_PERIOD;
@@ -86,6 +88,22 @@ impl<'a> Link<'a> {
         }
     }
 
+    /// The status as it goes on the wire: with per-sensor figures when the mock has several sensors.
+    fn status_payload(&mut self) -> Vec<u8> {
+        let status = self.status();
+        let n = self.cfg.sensors.max(1);
+        if n == 1 {
+            return status.encode().to_vec();
+        }
+        let sensors: Vec<SensorStat> = (0..n)
+            .map(|k| SensorStat {
+                noise_floor_counts: status.noise_floor_counts + u16::from(k),
+                trigger_rate_hz: status.trigger_rate_hz / u16::from(n),
+            })
+            .collect();
+        status.encode_with_sensors(&sensors)
+    }
+
     fn status(&mut self) -> Status {
         Status {
             temp_c_x10: 400 + self.rng.range(0, 30) as i16,
@@ -93,7 +111,8 @@ impl<'a> Link<'a> {
             noise_floor_counts: 60 + self.rng.range(0, 20) as u16,
             trigger_rate_hz: self.cfg.pd_rate_hz.min(u32::from(u16::MAX)) as u16,
             queue: 0,
-            flags: STATUS_MAINS_LOCK,
+            // Everything this mock sends is generated, and it says so in every status.
+            flags: STATUS_MAINS_LOCK | STATUS_SYNTHETIC,
         }
     }
 
@@ -112,6 +131,7 @@ impl<'a> Link<'a> {
                 phase: self.rng.range(0, u32::from(u16::MAX)) as u16,
                 width_ns: self.rng.range(40, 600) as u16,
                 polarity: (i % 2) as u8,
+                channel: (i % usize::from(self.cfg.sensors.max(1))) as u8,
             })
             .collect();
         let mut payload = Vec::new();

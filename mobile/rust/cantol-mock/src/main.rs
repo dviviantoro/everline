@@ -3,6 +3,7 @@ use std::thread;
 use std::time::Duration;
 
 use cantol_mock::{Config, spawn};
+use cantol_proto::msg::SensorStat;
 
 const USAGE: &str = "\
 cantol-mock: simulated Cantol device for the Cantol mobile app
@@ -19,6 +20,8 @@ usage: cantol-mock [options]
   --corrupt PCT           percent of frames with a flipped bit (default 0)
   --disconnect-every SECS close each connection after SECS    (default never)
   --device-id TEXT        up to 8 characters                  (default RP-MOCK)
+  --mac ADDR              MAC address it reports               (default 02:CA:57:00:00:01)
+  --sensors N             pretend to have N sensors (1 to 8)   (default 1; pulses cycle through them)
 ";
 
 fn main() -> ExitCode {
@@ -75,6 +78,13 @@ fn parse(args: Vec<String>) -> Result<Option<Config>, String> {
                     number(&value("--disconnect-every")?, "--disconnect-every")?;
             }
             "--device-id" => cfg.device_id = device_id(&value("--device-id")?)?,
+            "--mac" => cfg.mac = mac(&value("--mac")?)?,
+            "--sensors" => {
+                cfg.sensors = number(&value("--sensors")?, "--sensors")?;
+                if cfg.sensors == 0 || usize::from(cfg.sensors) > SensorStat::MAX_SENSORS {
+                    return Err("--sensors must be from 1 to 8".into());
+                }
+            }
             other => return Err(format!("unknown option {other}")),
         }
     }
@@ -93,6 +103,26 @@ fn device_id(text: &str) -> Result<[u8; 8], String> {
     let mut id = [0u8; 8];
     id[..text.len()].copy_from_slice(text.as_bytes());
     Ok(id)
+}
+
+/// `AA:BB:CC:DD:EE:FF` (colons or dashes, either case).
+fn mac(text: &str) -> Result<[u8; 6], String> {
+    let parts: Vec<&str> = text.split([':', '-']).collect();
+    let bad = || format!("--mac: '{text}' is not a MAC address like 02:CA:57:00:00:01");
+    if parts.len() != 6 {
+        return Err(bad());
+    }
+    let mut out = [0u8; 6];
+    for (slot, part) in out.iter_mut().zip(parts) {
+        if part.len() != 2 {
+            return Err(bad());
+        }
+        *slot = u8::from_str_radix(part, 16).map_err(|_| bad())?;
+    }
+    if out == [0u8; 6] {
+        return Err("--mac: 00:00:00:00:00:00 means \"no MAC\" and cannot be used".into());
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -123,11 +153,37 @@ mod tests {
     }
 
     #[test]
+    fn mac_option_takes_colons_or_dashes() {
+        let cfg = parse(args(&["--mac", "00:26:32:f0:1a:BC"]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(cfg.mac, [0x00, 0x26, 0x32, 0xF0, 0x1A, 0xBC]);
+        let cfg = parse(args(&["--mac", "00-26-32-F0-1A-BC"]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(cfg.mac, [0x00, 0x26, 0x32, 0xF0, 0x1A, 0xBC]);
+        assert_eq!(
+            parse(args(&[])).unwrap().unwrap().mac,
+            [0x02, 0xCA, 0x57, 0, 0, 1]
+        );
+    }
+
+    #[test]
     fn rejects_bad_input() {
         assert!(parse(args(&["--port", "abc"])).is_err());
         assert!(parse(args(&["--port"])).is_err());
         assert!(parse(args(&["--bogus"])).is_err());
         assert!(parse(args(&["--device-id", "far-too-long-id"])).is_err());
+        for bad in [
+            "",
+            "02:CA:57:00:00",
+            "02:CA:57:00:00:01:02",
+            "0:CA:57:00:00:01",
+            "GG:CA:57:00:00:01",
+            "00:00:00:00:00:00",
+        ] {
+            assert!(parse(args(&["--mac", bad])).is_err(), "{bad}");
+        }
         assert!(parse(args(&["--help"])).unwrap().is_none());
     }
 }
