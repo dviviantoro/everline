@@ -223,6 +223,9 @@ export class SimulatedCantol implements CantolLink {
       triggerRateHz: pulseRateHz(this.lastLevel, noise),
       queue: 0,
       mainsLock: !this.controls.get().mainsUnlocked,
+      // The demo build says what its data is on every screen (the badge), so no second chip is needed.
+      synthetic: false,
+      sensors: [],
     };
   }
 
@@ -250,6 +253,7 @@ export class SimulatedCantol implements CantolLink {
           phase: degreesToPhase16(degrees),
           widthNs: this.rng.int(40, 600),
           polarity: stray ? (degrees < 180 ? 0 : 1) : lobe.polarity,
+          sensor: 0,
         });
       }
       for (const h of this.handlers) h.onEvents(events);

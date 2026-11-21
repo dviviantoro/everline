@@ -5,6 +5,7 @@
  */
 import { createContext, useContext, type ReactNode } from 'react';
 
+import type { CantolSetupSource } from '../core/cantolSetup';
 import type { Dsp } from '../core/dsp';
 import type { CantolLink, Gnss, HotspotAssistant, SurveyApi } from '../core/links';
 import type { AppStore } from '../core/store';
@@ -42,17 +43,24 @@ export interface AppConfig {
   /** Elements rendered once inside the router (the demo build watches the route with one). */
   shellExtras: ReactNode;
   /**
-   * When set, this build cannot measure yet: the Ready screen shows this text and disables
-   * "Start measurement", the Live, Tag, Tracking and Surveys screens are not offered, and their
-   * routes lead back to the Ready screen. Left out (or null) in a build that can measure.
+   * When set, this build has no survey server to record against: Record, Tag and Surveys are not
+   * offered, their routes lead back to the Ready screen, and the Live screen shows this text instead
+   * of the Record button. Live PD works, and Tracking works without a line (a free walk with marks
+   * M1, M2, ..., nothing saved; ADR-011). Left out (or null) in a build with the server.
    */
-  measurementNote?: string | null;
+  surveysNote?: string | null;
 }
 
 export interface Services {
   config: AppConfig;
   dsp: Dsp;
   hotspot: HotspotAssistant;
+  /**
+   * Where the values from the Cantol's label (hotspot name and password, MAC address) are kept.
+   * A build that has the operator type them supplies this and the wizard asks once; a build with
+   * simulated sources leaves it out (null) and the wizard does not ask.
+   */
+  setup?: CantolSetupSource | null;
   link: CantolLink;
   gnss: Gnss;
   api: SurveyApi;

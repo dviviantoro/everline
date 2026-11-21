@@ -5,6 +5,7 @@ import { createConnection, type Socket } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { nodeCodec } from '../test/dspNode';
+import { splitFrames } from '../test/frames';
 
 /**
  * The codec against the real `cantol-mock` over a real socket: the bytes the phone will send and
@@ -63,5 +64,51 @@ describe.skipIf(!existsSync(MOCK))('link codec against cantol-mock', () => {
     socket.destroy();
     expect(answer.length).toBeGreaterThan(0);
     expect(answer[3]).toBe(0x03); // a status frame
+  });
+
+  it('streams pulses after the Start the codec builds, in dBmV, and stops after its Stop', async () => {
+    const socket = await open();
+    const collected: Uint8Array[] = [];
+    socket.on('data', (data) => collected.push(new Uint8Array(data)));
+    const everything = (): Uint8Array => {
+      const all = new Uint8Array(collected.reduce((n, c) => n + c.length, 0));
+      let at = 0;
+      for (const c of collected) {
+        all.set(c, at);
+        at += c.length;
+      }
+      return all;
+    };
+    const pulseFrames = (): number => splitFrames(everything()).frames.filter((f) => f[3] === 0x10).length;
+
+    socket.write(codec.hello(1, Date.now()));
+    socket.write(codec.start(2));
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    socket.write(codec.stop(3));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const pulseFramesAtStop = pulseFrames();
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const { frames, rest } = splitFrames(everything());
+    const pulseFramesLater = pulseFrames();
+    socket.destroy();
+
+    expect(rest, 'every byte belongs to a whole frame').toHaveLength(0);
+    const decoded = frames.filter((f) => f[3] !== 0x02).map((f) => codec.stream(f));
+    const batches = decoded.flatMap((f) => (f.kind === 'events' ? [f.events] : []));
+    const statuses = decoded.flatMap((f) => (f.kind === 'status' ? [f.status] : []));
+    expect(batches.length).toBeGreaterThanOrEqual(10);
+    const pulses = batches.flat();
+    // The mock's pulses are 50 to 4000 counts: 5 mV to 400 mV, 14 to 52 dBmV with the placeholder calibration.
+    expect(pulses.every((p) => p.ampDbmV >= 13.9 && p.ampDbmV <= 52.1)).toBe(true);
+    expect(pulses.every((p) => p.phase >= 0 && p.phase <= 65535)).toBe(true);
+    expect(new Set(pulses.map((p) => p.polarity))).toEqual(new Set([0, 1]));
+    expect(statuses.length).toBeGreaterThanOrEqual(1);
+    for (const s of statuses) {
+      expect(s.mainsLock).toBe(true);
+      expect(s.synthetic, 'the mock says its data is generated').toBe(true);
+      expect(s.noiseFloorDbmV).toBeGreaterThan(15);
+      expect(s.noiseFloorDbmV).toBeLessThan(19);
+    }
+    expect(pulseFramesLater, 'no pulses once Stop has been sent').toBe(pulseFramesAtStop);
   });
 });

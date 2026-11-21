@@ -64,10 +64,11 @@ export function DeviceScreen() {
   const cantolOk = state.cantol === 'linked';
   const gpsOk = state.accuracyM !== null;
   const allOk = hotspotOk && cantolOk && gpsOk;
-  const measurementNote = config.measurementNote ?? null;
 
+  // The Live screen starts the stream itself and, if the Cantol cannot be told to start, says so with a way to try again.
+  // Waiting for the stream here would leave a failed start with nothing to show.
   const start = () => {
-    void wizard.startMeasurement().then(() => navigate('/live'));
+    void navigate('/live');
   };
 
   return (
@@ -112,14 +113,9 @@ export function DeviceScreen() {
         </section>
 
         <div className="pinned" style={{ paddingBottom: 16 }}>
-          <button type="button" className="btn btn-primary" disabled={!allOk || measurementNote !== null} onClick={start}>
+          <button type="button" className="btn btn-primary" disabled={!allOk} onClick={start}>
             Start measurement
           </button>
-          {measurementNote === null ? null : (
-            <div className="helper" style={{ textAlign: 'center' }}>
-              {measurementNote}
-            </div>
-          )}
           {allOk ? null : (
             <div className="helper" style={{ textAlign: 'center' }} role="status">
               Something dropped out. It usually comes back by itself within 30 seconds.

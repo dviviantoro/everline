@@ -13,10 +13,12 @@ import { CopyIcon } from '../ui/icons';
 import { Pill, StepStrip, TopBar } from '../ui/primitives';
 
 export function HotspotScreen() {
-  const { hotspot } = useServices();
+  const { hotspot, setup } = useServices();
   const wizard = useWizard();
   const navigate = useNavigate();
   const profile = hotspot.profile();
+  // Only a build that asks for the Cantol's label values has a MAC address to show (and to change).
+  const labelMac = setup?.current()?.mac ?? null;
   const status = wizard.state.hotspot;
   const [copied, setCopied] = useState(false);
 
@@ -95,6 +97,16 @@ export function HotspotScreen() {
             {copied ? 'Copied' : 'Copy'}
           </button>
         </div>
+        {labelMac === null ? null : (
+          <div>
+            <div className="helper" style={{ fontSize: '0.75rem' }}>
+              Cantol MAC address
+            </div>
+            <div className="mono" style={{ marginTop: 2, fontSize: '1rem', fontWeight: 500, overflowWrap: 'anywhere' }}>
+              {labelMac}
+            </div>
+          </div>
+        )}
         <ul className="helper bullets">
           <li>Use the 2.4 GHz band.</li>
           <li>Switch off the hotspot&apos;s automatic turn-off.</li>
@@ -115,6 +127,14 @@ export function HotspotScreen() {
           <Pill tone="warn">Checking</Pill>
         )}
       </section>
+
+      {labelMac === null ? null : (
+        <div style={{ marginTop: 6, display: 'flex', justifyContent: 'center' }}>
+          <Link to="/setup/device" className="text-link">
+            Not what the Cantol label says? Change
+          </Link>
+        </div>
+      )}
 
       <div className="pinned">
         {status === 'on' ? (

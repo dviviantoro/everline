@@ -16,6 +16,17 @@ export interface LinkStateEvent {
   detail?: string;
 }
 
+/** One whole frame that arrived on the held link, as the bytes it was. Emitted only while someone listens for `frame`. */
+export interface FrameEvent {
+  dataB64: string;
+}
+
+/** The events the Cantol link plugin emits, by name. */
+export interface LinkNativeEvents {
+  linkState: LinkStateEvent;
+  frame: FrameEvent;
+}
+
 /** The held link's health, as the plugin reports it. */
 export interface LinkStatus {
   connected: boolean;
@@ -45,12 +56,14 @@ export interface CantolLinkNative {
     intervalMs?: number;
     connectTimeoutMs?: number;
   }): Promise<{ rttMs: number }>;
+  /** Writes one frame, built by the app (Start, Stop), on the held link. Rejects with code `not_connected` or `io`. */
+  send(options: { dataB64: string }): Promise<void>;
   disconnect(): Promise<void>;
   linkStatus(): Promise<LinkStatus>;
   getLastKnown(): Promise<{ address?: string }>;
   setLastKnown(options: { address?: string }): Promise<void>;
   diagnostics(): Promise<{ rows: { label: string; value: string }[] }>;
-  addListener(eventName: 'linkState', listener: (event: LinkStateEvent) => void): Promise<PluginListenerHandle>;
+  addListener<E extends keyof LinkNativeEvents>(eventName: E, listener: (event: LinkNativeEvents[E]) => void): Promise<PluginListenerHandle>;
 }
 
 export interface GnssHelperNative {

@@ -18,6 +18,8 @@ import {
 } from 'react';
 import { useLocation } from 'react-router';
 
+import type { CantolSetup } from '../core/cantolSetup';
+import { WrongDeviceError } from '../core/links';
 import type { GpsFix } from '../core/types';
 import {
   hotspotMet,
@@ -25,6 +27,8 @@ import {
   initialWizardState,
   MIN_GPS_ACCURACY_M,
   needsClock,
+  NO_FIX_AFTER_MS,
+  setupMet,
   wizardInitialised,
   wizardReducer,
   wizardStep,
@@ -38,7 +42,6 @@ const HOTSPOT_POLL_MS = 1500;
 const GPS_POLL_MS = 2000;
 /** How long the first screen waits for the quick checks before it stops waiting for the ones that have not answered. */
 const CHECKS_GIVE_UP_MS = 4000;
-const NO_FIX_AFTER_MS = 5000;
 const RETRY_DISCOVERY_MS = 2000;
 const VERIFY_TIMEOUT_MS = 5000;
 const RESTORE_POLL_MS = 3000;
@@ -79,11 +82,15 @@ interface WizardValue {
   step: WizardStep;
   initialised: boolean;
   helpCard: boolean;
-  /** Why the last manual connection attempt failed, in words an operator can act on. */
+  /** Why the last connection attempt failed, in words an operator can act on. */
   discoveryError: string | null;
+  /** True when that failure is a device answering with another MAC address than the one entered: the label values may be wrong. */
+  labelProblem: boolean;
   /** What the latest hotspot check or location check failed with (null while it works), so a stuck screen can say why. */
   checkErrors: { hotspot: string | null; gps: string | null };
   manualAddress: string | null;
+  /** Keeps the label values. A different MAC address drops the current link so the search starts again for that unit. */
+  saveSetup: (next: CantolSetup) => Promise<void>;
   openHotspotSettings: () => void;
   continueAnyway: () => void;
   /** Look for Cantol at this address instead of discovering it. */
@@ -124,7 +131,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 export function WizardProvider({ children }: { children: ReactNode }) {
-  const { hotspot, link, gnss, now } = useServices();
+  const { hotspot, link, gnss, setup, now } = useServices();
   const { operator } = useSession();
   const location = useLocation();
   const enabled = operator !== null;
@@ -133,10 +140,12 @@ export function WizardProvider({ children }: { children: ReactNode }) {
   const [manualAddress, setManualAddress] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [labelProblem, setLabelProblem] = useState(false);
   const [hotspotError, setHotspotError] = useState<string | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [fixStore] = useState(createFixStore);
 
+  const setupOk = setupMet(state);
   const hotspotOk = hotspotMet(state);
   const gpsActive = state.gpsPermission === 'granted' && state.gpsServices === 'on';
   const cantolWanted = state.cantol === 'unknown' || state.cantol === 'searching' || state.cantol === 'found';
@@ -153,6 +162,26 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       window.clearInterval(id);
     };
   }, [enabled, clockNeeded, now]);
+
+  // The label values: read once. A build that does not ask for them has them "saved" from the start;
+  // a read that fails counts as "nothing saved" so the operator can enter them.
+  useEffect(() => {
+    let alive = true;
+    if (setup == null) {
+      dispatch({ type: 'SETUP_STATE', saved: true });
+      return undefined;
+    }
+    void setup
+      .load()
+      .then((saved) => saved !== null)
+      .catch(() => false)
+      .then((saved) => {
+        if (alive) dispatch({ type: 'SETUP_STATE', saved });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [setup]);
 
   // Hotspot: asked now, on every resume, and every 1.5 s.
   useEffect(() => {
@@ -249,7 +278,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
 
   // Finding Cantol: discover, then ping (HELLO/PONG), then connect. Retries until it works or the step is left.
   useEffect(() => {
-    if (!enabled || !hotspotOk || !cantolWanted) return undefined;
+    if (!enabled || !setupOk || !hotspotOk || !cantolWanted) return undefined;
     const controller = new AbortController();
     const { signal } = controller;
     // Read through a function: TypeScript would otherwise assume `aborted` cannot change across an await.
@@ -266,11 +295,13 @@ export function WizardProvider({ children }: { children: ReactNode }) {
           await link.connect(candidate);
           if (aborted()) return;
           setDiscoveryError(null);
+          setLabelProblem(false);
           dispatch({ type: 'CANTOL_LINKED', rttMs: ping.rttMs });
           return;
         } catch (error) {
           if (aborted() || isAbort(error)) return;
           setDiscoveryError(message(error));
+          setLabelProblem(error instanceof WrongDeviceError);
           await sleep(RETRY_DISCOVERY_MS, signal);
         }
       }
@@ -278,7 +309,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     return () => {
       controller.abort();
     };
-  }, [enabled, hotspotOk, cantolWanted, link, manualAddress, retryNonce, now]);
+  }, [enabled, setupOk, hotspotOk, cantolWanted, link, manualAddress, retryNonce, now]);
 
   // Link state from the plugin. While lost, keep trying to ping so a quick recovery is silent.
   useEffect(() => {
@@ -395,8 +426,24 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       initialised: wizardInitialised(state),
       helpCard: helpCardVisible(state),
       discoveryError,
+      labelProblem,
       checkErrors: { hotspot: hotspotError, gps: gpsError },
       manualAddress,
+      saveSetup: async (next) => {
+        if (setup == null) return;
+        const previousMac = setup.current()?.mac ?? null;
+        await setup.save(next);
+        dispatch({ type: 'SETUP_STATE', saved: true });
+        if (previousMac !== next.mac) {
+          // A different unit is now wanted: let go of the old one and look again.
+          await link.disconnect().catch(() => undefined);
+          dispatch({ type: 'CANTOL_FORGET' });
+          setDiscoveryError(null);
+          setLabelProblem(false);
+          setManualAddress(null);
+          setRetryNonce((n) => n + 1);
+        }
+      },
       openHotspotSettings: () => {
         void hotspot.openSettings();
       },
@@ -436,11 +483,26 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         fixStore.set(null);
         setManualAddress(null);
         setDiscoveryError(null);
+        setLabelProblem(false);
         dispatch({ type: 'RESET' });
       },
       fixStore,
     }),
-    [state, discoveryError, hotspotError, gpsError, manualAddress, hotspot, gnss, link, startMeasurement, stopMeasurement, fixStore],
+    [
+      state,
+      discoveryError,
+      labelProblem,
+      hotspotError,
+      gpsError,
+      manualAddress,
+      hotspot,
+      gnss,
+      link,
+      setup,
+      startMeasurement,
+      stopMeasurement,
+      fixStore,
+    ],
   );
 
   return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>;

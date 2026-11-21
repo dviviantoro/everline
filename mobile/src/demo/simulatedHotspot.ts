@@ -1,7 +1,7 @@
 /** Simulated hotspot: off until a moment after the operator taps "Open hotspot settings". */
 import type { HotspotAssistant, HotspotProfile } from '../core/links';
 
-/** Placeholder values. The real ones come from the gitignored device profile and are never committed. */
+/** Placeholder values for the demo. In the field build the operator types the real ones from the Cantol's label (ADR-009). */
 export const DEMO_HOTSPOT_PROFILE: HotspotProfile = {
   ssid: 'DEMO-hotspot',
   band: '2.4 GHz',

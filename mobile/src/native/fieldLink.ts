@@ -5,24 +5,36 @@
  * Discovery order, as in the ADR: the last address that worked, then the UDP beacon and a scan of
  * the hotspot subnet together, then a manual address. Whatever is found is only a candidate until
  * it answers a HELLO with a PONG that echoes our nonce.
+ *
+ * Streaming: `startStream` sends a Start frame on the held link and listens for the plugin's `frame`
+ * events; each is decoded by the Rust codec into a status or a batch of pulses (amplitudes already in
+ * dBmV) and handed to the subscribers. A stream that was wanted is asked for again when the plugin
+ * reconnects, because the device streams per connection.
  */
+import { sameMac } from '../core/cantolSetup';
 import { LinkProtocolError, type LinkCodec } from '../core/linkCodec';
-import type {
-  CantolCandidate,
-  CantolHandlers,
-  CantolLink,
-  DiagnosticRow,
-  LinkState,
-  PingResult,
-  Unsubscribe,
+import {
+  WrongDeviceError,
+  type CantolCandidate,
+  type CantolHandlers,
+  type CantolLink,
+  type DiagnosticRow,
+  type LinkState,
+  type PingResult,
+  type Unsubscribe,
 } from '../core/links';
-import type { CantolLinkNative, LinkStatus } from './plugins';
+import type { CantolLinkNative, FrameEvent, LinkStatus } from './plugins';
 
 export interface FieldLinkOptions {
   native: CantolLinkNative;
   codec: LinkCodec;
   tcpPort: number;
   beaconPort: number;
+  /**
+   * The MAC address typed from the Cantol's label, read at the moment of each handshake so an
+   * edit applies at once. Only a device that reports exactly this address is accepted.
+   */
+  expectedMac: () => string | null;
   /** The phone's clock in epoch milliseconds (Cantol has no clock of its own). */
   now: () => number;
   /** A number in [0, 1); only the HELLO nonce comes from it. */
@@ -89,6 +101,7 @@ export function describeLinkError(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (code === 'timeout') return 'Cantol did not answer in time.';
   if (code === 'refused') return 'Nothing is listening on the Cantol port at that address.';
+  if (code === 'not_connected') return 'The Cantol link is down. It reconnects by itself; try again in a moment.';
   if (error instanceof LinkProtocolError) {
     return error.code === 'no_frame' ? 'The device answered, but not as a Cantol does.' : error.message;
   }
@@ -103,7 +116,7 @@ interface Held {
 }
 
 export function createFieldLink(options: FieldLinkOptions): CantolLink {
-  const { native, codec, tcpPort, beaconPort, now } = options;
+  const { native, codec, tcpPort, beaconPort, expectedMac, now } = options;
   const random = options.random ?? Math.random;
   const roundPauseMs = options.roundPauseMs ?? 500;
 
@@ -112,9 +125,52 @@ export function createFieldLink(options: FieldLinkOptions): CantolLink {
   let held: Held | null = null;
   let lastProtocol = 1;
   let lastAttempt = 'none yet';
+  /** The first device this search round turned away for its MAC address, so `discover` can say so. */
+  let turnedAway: WrongDeviceError | null = null;
+  // Read through a function: TypeScript would otherwise assume the value cannot change across an await.
+  const turnedAwayNow = (): WrongDeviceError | null => turnedAway;
 
   const emit = (state: LinkState): void => {
     for (const handler of handlers) handler.onLinkState(state);
+  };
+
+  // The stream. The device streams per connection, so `wantStream` is what a reconnect must restore.
+  let wantStream = false;
+  let frameListener: Promise<{ remove: () => Promise<void> }> | null = null;
+  let controlSeq = 1;
+  const streamStats = { frames: 0, unreadable: 0, pulses: 0, lastProblem: '', synthetic: null as boolean | null };
+
+  const sendControl = async (frame: Uint8Array): Promise<void> => {
+    controlSeq += 1;
+    await native.send({ dataB64: toBase64(frame) });
+  };
+
+  const onFrame = (event: FrameEvent): void => {
+    let decoded;
+    try {
+      decoded = codec.stream(fromBase64(event.dataB64));
+    } catch (error) {
+      // A damaged frame is one lost moment of data, not a reason to stop: count it for Diagnostics.
+      streamStats.unreadable += 1;
+      streamStats.lastProblem = describeLinkError(error);
+      return;
+    }
+    streamStats.frames += 1;
+    if (decoded.kind === 'status') {
+      streamStats.synthetic = decoded.status.synthetic;
+      for (const handler of handlers) handler.onStatus(decoded.status);
+    } else if (decoded.kind === 'events') {
+      streamStats.pulses += decoded.events.length;
+      if (decoded.events.length > 0) for (const handler of handlers) handler.onEvents(decoded.events);
+    } else if (decoded.kind === 'device_error') {
+      streamStats.lastProblem = `Cantol reported error ${String(decoded.code)}`;
+    }
+  };
+
+  const stopListeningForFrames = (): void => {
+    const listener = frameListener;
+    frameListener = null;
+    if (listener !== null) void listener.then((handle) => handle.remove()).catch(() => undefined);
   };
 
   /** HELLO to one address; resolves only for a PONG that echoes our nonce. */
@@ -127,6 +183,18 @@ export function createFieldLink(options: FieldLinkOptions): CantolLink {
     });
     const pong = codec.pong(fromBase64(reply.replyB64));
     if (pong.nonce !== nonce) throw new LinkProtocolError('nonce_mismatch');
+    // Only the unit the operator set up is accepted: whatever else answers the handshake is turned away.
+    const expected = expectedMac();
+    if (expected === null) throw new Error('Enter the Cantol label values before searching.');
+    if (pong.mac === null || !sameMac(pong.mac, expected)) {
+      throw new WrongDeviceError({
+        reason: pong.mac === null ? 'mac_missing' : 'mac_mismatch',
+        address,
+        deviceId: pong.deviceId,
+        reportedMac: pong.mac,
+        expectedMac: expected,
+      });
+    }
     lastProtocol = pong.protocol;
     return { pong, rttMs: reply.rttMs };
   };
@@ -140,6 +208,7 @@ export function createFieldLink(options: FieldLinkOptions): CantolLink {
         lastAttempt = `${address}: answered as ${pong.deviceId}`;
         return { address, deviceId: pong.deviceId };
       } catch (error) {
+        if (error instanceof WrongDeviceError) turnedAway ??= error;
         lastAttempt = `${address}: ${describeLinkError(error)}`;
       }
     }
@@ -177,6 +246,12 @@ export function createFieldLink(options: FieldLinkOptions): CantolLink {
 
   const ensureNativeListener = (): void => {
     nativeListener ??= native.addListener('linkState', (event) => {
+      // The plugin reconnected on its own and the new connection streams nothing until asked again.
+      if (event.state === 'up' && wantStream) {
+        sendControl(codec.start(controlSeq)).catch((error: unknown) => {
+          streamStats.lastProblem = `Start after reconnect: ${describeLinkError(error)}`;
+        });
+      }
       emit(event.state);
     });
   };
@@ -185,9 +260,14 @@ export function createFieldLink(options: FieldLinkOptions): CantolLink {
     async discover({ manualAddress, signal }) {
       for (;;) {
         throwIfAborted(signal);
+        turnedAway = null;
         const candidate =
           manualAddress === undefined ? await automaticRound(signal) : await firstThatAnswers([manualAddress], signal);
         if (candidate !== null) return candidate;
+        // A device answered but is not the one set up: say so, rather than searching in silence.
+        // The caller waits a moment and calls again, so a corrected MAC address is picked up.
+        const refusal = turnedAwayNow();
+        if (refusal !== null) throw refusal;
         await sleep(roundPauseMs, signal);
       }
     },
@@ -221,6 +301,7 @@ export function createFieldLink(options: FieldLinkOptions): CantolLink {
         }
       }
       throwIfAborted(signal);
+      if (lastError instanceof WrongDeviceError) throw lastError;
       if (answer === null) throw new Error(describeLinkError(lastError));
       return { ...answer, rttMs: oneDecimal(median(samples)) };
     },
@@ -238,16 +319,42 @@ export function createFieldLink(options: FieldLinkOptions): CantolLink {
 
     async disconnect() {
       held = null;
+      wantStream = false;
+      stopListeningForFrames();
       await native.disconnect();
     },
 
-    startStream() {
-      // TASK-006: the live pipeline. The app does not offer measurement in this build.
-      return Promise.reject(new Error('Live measurement is not part of this release.'));
+    async startStream() {
+      if (held === null) throw new Error('The Cantol is not connected yet.');
+      // Listen first, so the first frames after Start are not missed.
+      if (frameListener === null) {
+        frameListener = native.addListener('frame', onFrame);
+        try {
+          await frameListener;
+        } catch (error) {
+          frameListener = null;
+          throw new Error(describeLinkError(error), { cause: error });
+        }
+      }
+      wantStream = true;
+      try {
+        await sendControl(codec.start(controlSeq));
+      } catch (error) {
+        // Not streaming after all: a later reconnect must not start something nobody is waiting for.
+        wantStream = false;
+        stopListeningForFrames();
+        throw new Error(describeLinkError(error), { cause: error });
+      }
     },
 
-    stopStream() {
-      return Promise.resolve();
+    async stopStream() {
+      const wasStreaming = wantStream;
+      wantStream = false;
+      if (wasStreaming && held !== null) {
+        // Best effort: if the link is down the device is not streaming to us anyway.
+        await sendControl(codec.stop(controlSeq)).catch(() => undefined);
+      }
+      stopListeningForFrames();
     },
 
     subscribe(next): Unsubscribe {
@@ -261,7 +368,22 @@ export function createFieldLink(options: FieldLinkOptions): CantolLink {
     async diagnostics(): Promise<DiagnosticRow[]> {
       const rows: DiagnosticRow[] = [
         { label: 'Cantol ports', value: `TCP ${String(tcpPort)}, beacon UDP ${String(beaconPort)}` },
+        { label: 'Expected MAC', value: expectedMac() ?? 'not entered' },
         { label: 'Last attempt', value: lastAttempt },
+        { label: 'Stream', value: wantStream ? 'requested' : 'off' },
+        {
+          label: 'Frames',
+          value: `${String(streamStats.frames)} read, ${String(streamStats.unreadable)} unreadable, ${String(streamStats.pulses)} pulses${streamStats.lastProblem === '' ? '' : `; last problem: ${streamStats.lastProblem}`}`,
+        },
+        {
+          label: 'Data',
+          value:
+            streamStats.synthetic === null
+              ? 'none yet'
+              : streamStats.synthetic
+                ? 'test data, generated by the device'
+                : 'from the device',
+        },
       ];
       try {
         rows.push(...(await native.diagnostics()).rows);

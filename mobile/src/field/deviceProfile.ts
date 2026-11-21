@@ -1,17 +1,18 @@
 /**
- * The hotspot and Cantol settings the operator needs (ADR-003 decision 4): the network name and
- * password to set on the phone's hotspot, the band, and the two ports. They come from
+ * The Cantol settings that belong to the build, not to one device: the Wi-Fi band the hotspot
+ * should use and the two ports the link speaks (ADR-003 decision 4). They come from
  * `config/device-profile.local.json`, which is gitignored; when it is absent the committed
- * `device-profile.example.json` is used, and the build script says so. Both are read at build
- * time, through this one function, never from source.
+ * `device-profile.example.json` is used, and its values are the right ones for a stock unit. Both
+ * are read at build time, through this one function, never from source.
  *
- * The name and password must match what the Cantol device is set to join. The password is shown
- * to the operator and copied on request; it is never sent anywhere or logged, and it is inside
- * the APK, so an APK built with a real profile is not for sharing.
+ * The hotspot name and password and the unit's MAC address are NOT here. They are printed on each
+ * Cantol's label and the operator types them on the phone the first time (`core/cantolSetup.ts`),
+ * so an APK carries no network secret and one build serves every unit. A `ssid` or `password` key
+ * left in an older local profile is ignored.
  */
-import type { HotspotProfile } from '../core/links';
-
-export interface DeviceProfile extends HotspotProfile {
+export interface DeviceProfile {
+  /** Shown on the hotspot screen: the band to choose in the phone's hotspot settings. */
+  band: string;
   tcpPort: number;
   beaconPort: number;
 }
@@ -47,14 +48,11 @@ function port(value: unknown, field: string): number {
   return value;
 }
 
-/** Checks the shape; an error names the field and never repeats a value (one of them is a password). */
+/** Checks the shape; an error names the field and never repeats a value. */
 export function parseProfile(raw: unknown): DeviceProfile {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw new Error('device profile: expected an object');
   const o = raw as Record<string, unknown>;
   const profile: DeviceProfile = {
-    // A hotspot name is at most 32 bytes and a WPA2 passphrase 8 to 63 characters.
-    ssid: text(o.ssid, 'ssid', 1, 32),
-    password: text(o.password, 'password', 8, 63),
     band: text(o.band, 'band', 1, 20),
     tcpPort: port(o.tcpPort, 'tcpPort'),
     beaconPort: port(o.beaconPort, 'beaconPort'),

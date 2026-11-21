@@ -71,7 +71,7 @@ describe('simulated Cantol generator', () => {
     expect(statuses.length).toBeLessThanOrEqual(7);
     for (const s of statuses) {
       expect(Object.keys(s).sort()).toEqual(
-        ['adcClipPct', 'mainsLock', 'noiseFloorDbmV', 'queue', 'tempC', 'triggerRateHz'].sort(),
+        ['adcClipPct', 'mainsLock', 'noiseFloorDbmV', 'queue', 'sensors', 'synthetic', 'tempC', 'triggerRateHz'].sort(),
       );
       expect(s.noiseFloorDbmV).toBeGreaterThan(5.5);
       expect(s.noiseFloorDbmV).toBeLessThan(6.5);

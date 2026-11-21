@@ -14,7 +14,7 @@ export type Unsubscribe = () => void;
 // ---------------------------------------------------------------------------------------------
 // Hotspot
 
-/** What the setup card shows. The real values come from the gitignored device profile (ADR-003). */
+/** What the setup card shows. In the field build the operator types the name and password from the Cantol's label (ADR-009); the band is the build's. */
 export interface HotspotProfile {
   ssid: string;
   band: string;
@@ -44,6 +44,42 @@ export interface PingResult {
   protocol: number;
 }
 
+/**
+ * Something answered the handshake like a Cantol but is not the unit the operator set up: its MAC
+ * address differs from the one typed from the label, or it reported none. The link refuses it, so
+ * a second Cantol on the same hotspot, or a typing mistake, shows up as a message instead of a
+ * wrong connection.
+ */
+export class WrongDeviceError extends Error {
+  readonly reason: 'mac_mismatch' | 'mac_missing';
+  readonly address: string;
+  readonly deviceId: string;
+  /** What the device reported, or null when it reported nothing. */
+  readonly reportedMac: string | null;
+  readonly expectedMac: string;
+
+  constructor(details: {
+    reason: 'mac_mismatch' | 'mac_missing';
+    address: string;
+    deviceId: string;
+    reportedMac: string | null;
+    expectedMac: string;
+  }) {
+    const { reason, address, deviceId, reportedMac, expectedMac } = details;
+    super(
+      reason === 'mac_missing'
+        ? `A device answered at ${address} (${deviceId}) but did not report a MAC address, so it cannot be checked against ${expectedMac}.`
+        : `A device answered at ${address} (${deviceId}) with MAC address ${reportedMac ?? '?'}, not the ${expectedMac} you entered.`,
+    );
+    this.name = 'WrongDeviceError';
+    this.reason = reason;
+    this.address = address;
+    this.deviceId = deviceId;
+    this.reportedMac = reportedMac;
+    this.expectedMac = expectedMac;
+  }
+}
+
 /** `down` before connect, `up` while data flows, `lost` after an unplanned drop. */
 export type LinkState = 'down' | 'up' | 'lost';
 
@@ -57,6 +93,15 @@ export interface PdEventSample {
   widthNs: number;
   /** 0 positive half-cycle, 1 negative. */
   polarity: 0 | 1;
+  /** Which sensor saw it, counted from 0 (always 0 for a device with one sensor). */
+  sensor: number;
+}
+
+/** One sensor's own figures in a status, for a device with several. */
+export interface SensorStatus {
+  noiseFloorDbmV: number;
+  /** Pulses a second this sensor saw. */
+  rateHz: number;
 }
 
 /** The fields of `Status` in `cantol-proto/src/msg.rs`, with the noise floor calibrated to dBmV. */
@@ -68,6 +113,13 @@ export interface CantolStatus {
   queue: number;
   /** `STATUS_MAINS_LOCK`: without it the phase of an event means nothing. */
   mainsLock: boolean;
+  /**
+   * `STATUS_SYNTHETIC`: the device says the numbers it sends are generated test data, not
+   * measurements. Every screen that shows them says so; nothing may pass them off as a reading.
+   */
+  synthetic: boolean;
+  /** Per-sensor figures, one entry per sensor; empty when the device reports none. */
+  sensors: readonly SensorStatus[];
 }
 
 export interface CantolHandlers {

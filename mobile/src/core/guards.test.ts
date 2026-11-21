@@ -29,6 +29,25 @@ describe('guard 1: no operator means /login', () => {
   });
 });
 
+describe('the Cantol label screen', () => {
+  it('is where everything leads until the values are entered', () => {
+    for (const path of ['/', '/setup/hotspot', '/setup/cantol', '/setup/gps', '/device', '/live']) {
+      expect(guardRedirect(path, signedIn('DEVICE_SETUP'))).toBe('/setup/device');
+    }
+    expect(guardRedirect('/setup/device', signedIn('DEVICE_SETUP'))).toBeNull();
+  });
+
+  it('can be opened again at any later step, to correct a value', () => {
+    for (const step of ['HOTSPOT_CHECK', 'CANTOL_DISCOVER', 'LOCATION', 'READY'] as const) {
+      expect(guardRedirect('/setup/device', signedIn(step))).toBeNull();
+    }
+  });
+
+  it('goes back to the hotspot screen', () => {
+    expect(parentRoute('/setup/device')).toBe('/setup/hotspot');
+  });
+});
+
 describe('guard 2: the wizard must be at READY', () => {
   it('keeps /device, /live, /track and /track/setup closed until READY', () => {
     for (const path of ['/device', '/live', '/track', '/track/setup']) {

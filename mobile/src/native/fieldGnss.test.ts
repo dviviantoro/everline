@@ -1,7 +1,15 @@
 import type { PermissionStatus } from '@capacitor/geolocation';
 import { describe, expect, it } from 'vitest';
 
-import { createFieldGnss, isLocationDisabled, mapPermission, type GeoPosition, type GeolocationApi } from './fieldGnss';
+import { NO_FIX_AFTER_MS } from '../core/wizard';
+import {
+  createFieldGnss,
+  GPS_WATCH_INTERVAL_MS,
+  isLocationDisabled,
+  mapPermission,
+  type GeoPosition,
+  type GeolocationApi,
+} from './fieldGnss';
 import type { GnssHelperNative } from './plugins';
 
 const status = (location: PermissionStatus['location'], coarseLocation: PermissionStatus['coarseLocation'] = location): PermissionStatus => ({
@@ -33,7 +41,7 @@ function fakes() {
     pluginError: null as Error | null,
     granted: { fine: true, coarse: true },
   };
-  const calls = { clearWatch: [] as string[], watchOptions: [] as unknown[], openLocationSettings: 0, openAppSettings: 0 };
+  const calls = { clearWatch: [] as string[], watchOptions: [] as Parameters<GeolocationApi['watchPosition']>[0][], openLocationSettings: 0, openAppSettings: 0 };
   const geolocation: GeolocationApi = {
     checkPermissions: () => (state.pluginError === null ? Promise.resolve(status('granted')) : Promise.reject(state.pluginError)),
     requestPermissions: () => (state.pluginError === null ? Promise.resolve(status(state.rationale)) : Promise.reject(state.pluginError)),
@@ -115,6 +123,10 @@ describe('location services off, the usual state of a phone before the operator 
     clock += 5000;
     await gnss.ensureServicesOn();
     expect(f.calls.openLocationSettings, 'a later, separate tap opens it again').toBe(2);
+    // Two seconds is a person tapping again, not the second half of one tap.
+    clock += 2 * 1000;
+    await gnss.ensureServicesOn();
+    expect(f.calls.openLocationSettings, 'a tap two seconds later is a new request').toBe(3);
   });
 
   it('lets any other failure through, so it is shown and not hidden', async () => {
@@ -155,7 +167,21 @@ describe('the real Gnss', () => {
     f.deliver(position(6.2));
     f.deliver(null);
     expect(fixes).toEqual([{ latitude: -6.89, longitude: 109.67, accuracyM: 6.2, at: 1234 }]);
-    expect(f.calls.watchOptions).toEqual([{ enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 }]);
+    expect(f.calls.watchOptions).toEqual([
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0, interval: 1000, minimumUpdateInterval: 1000 },
+    ]);
+  });
+
+  it('asks for positions well inside the time after which the app says "no fix"', () => {
+    // The plugin defaults (interval = timeout = 10 s, fastest rate 5 s) delivered a fix about every
+    // 10 s while the app calls 5 s of silence "no fix": the status flickered on a phone with a good signal.
+    const f = fakes();
+    createFieldGnss(f.geolocation, f.helper, () => 1).watch(() => undefined);
+    const [options] = f.calls.watchOptions;
+    expect(options).toBeDefined();
+    const slowest = Math.max(options?.interval ?? Infinity, options?.minimumUpdateInterval ?? Infinity);
+    expect(slowest, 'a fix at least this often').toBe(GPS_WATCH_INTERVAL_MS);
+    expect(slowest * 3, 'two missed fixes in a row must not yet count as "no fix"').toBeLessThanOrEqual(NO_FIX_AFTER_MS);
   });
 
   it('stops the watch when told to, whether or not the plugin had answered yet', async () => {

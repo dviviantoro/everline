@@ -4,8 +4,10 @@ import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
 import { guardRedirect } from '../core/guards';
 import { routeForStep } from '../core/wizard';
 import { CantolScreen } from '../screens/CantolScreen';
+import { CantolSetupScreen } from '../screens/CantolSetupScreen';
 import { DiagnosticsScreen, EnterAddressScreen } from '../screens/CantolHelpScreens';
 import { DeviceScreen } from '../screens/DeviceScreen';
+import { FreeWalkScreen } from '../screens/FreeWalkScreen';
 import { GpsScreen } from '../screens/GpsScreen';
 import { HotspotScreen } from '../screens/HotspotScreen';
 import { LiveScreen } from '../screens/LiveScreen';
@@ -42,8 +44,8 @@ function Loading() {
   );
 }
 
-/** The screens that need a live measurement; a build with a `measurementNote` has none of them. */
-const MEASUREMENT_ROUTES: readonly string[] = ['/live', '/track/setup', '/track', '/tag', '/surveys'];
+/** The screens that record against the survey server; a build with a `surveysNote` has none of them. Tracking is not one: it walks free (FreeWalkScreen). */
+const SURVEY_ROUTES: readonly string[] = ['/tag', '/surveys'];
 
 /** Routes whose guard needs the wizard's first checks, so they wait for them on a cold start. */
 function waitsForWizard(path: string): boolean {
@@ -61,7 +63,7 @@ export function AppRoutes() {
 
   const redirect = guardRedirect(pathname, { operator: session.operator, step: wizard.step });
   if (redirect !== null && redirect !== pathname) return <Navigate to={redirect} replace />;
-  if (config.measurementNote != null && MEASUREMENT_ROUTES.includes(pathname)) return <Navigate to="/device" replace />;
+  if (config.surveysNote != null && SURVEY_ROUTES.includes(pathname)) return <Navigate to="/device" replace />;
 
   return (
     <Routes>
@@ -70,6 +72,7 @@ export function AppRoutes() {
         path="/welcome"
         element={<WelcomeScreen destination={wizard.initialised ? routeForStep(wizard.step) : null} />}
       />
+      <Route path="/setup/device" element={<CantolSetupScreen />} />
       <Route path="/setup/hotspot" element={<HotspotScreen />} />
       <Route path="/setup/cantol" element={<CantolScreen />} />
       <Route path="/setup/cantol/address" element={<EnterAddressScreen />} />
@@ -77,8 +80,8 @@ export function AppRoutes() {
       <Route path="/setup/gps" element={<GpsScreen />} />
       <Route path="/device" element={<DeviceScreen />} />
       <Route path="/live" element={<LiveScreen />} />
-      <Route path="/track/setup" element={<TrackSetupScreen />} />
-      <Route path="/track" element={<TrackingScreen />} />
+      <Route path="/track/setup" element={config.surveysNote != null ? <Navigate to="/track" replace /> : <TrackSetupScreen />} />
+      <Route path="/track" element={config.surveysNote != null ? <FreeWalkScreen /> : <TrackingScreen />} />
       <Route path="/tag" element={<TagScreen />} />
       <Route path="/surveys" element={<SurveysScreen />} />
       {config.extraRoutes.map((route) => (

@@ -1,6 +1,7 @@
 /**
  * The connection wizard as a pure reducer (`mobile-app.md` "Connection wizard", amended by
- * ADR-006): HOTSPOT_CHECK, HOTSPOT_GUIDE, CANTOL_DISCOVER, CANTOL_PING, LOCATION, STREAMING,
+ * ADR-006 and, for the field build, ADR-009): DEVICE_SETUP (the values from the Cantol's label,
+ * asked once; a build without it starts with them saved), HOTSPOT_CHECK, HOTSPOT_GUIDE, CANTOL_DISCOVER, CANTOL_PING, LOCATION, STREAMING,
  * READY. The old PERMS state is folded into LOCATION.
  *
  * The state holds facts (is the hotspot on, is Cantol linked, is there a good fix); the step is
@@ -14,6 +15,7 @@
 import type { LocationPermission } from './links';
 
 export type WizardStep =
+  | 'DEVICE_SETUP'
   | 'HOTSPOT_CHECK'
   | 'HOTSPOT_GUIDE'
   | 'CANTOL_DISCOVER'
@@ -26,13 +28,20 @@ export type WizardStep =
 export const LINK_GRACE_MS = 30_000;
 /** After this long without a candidate the Cantol screen shows the help card. */
 export const CANTOL_HELP_AFTER_MS = 60_000;
+/** Without a new fix for this long the app says "no fix". The location source must report well inside it. */
+export const NO_FIX_AFTER_MS = 5000;
 /** Assumption: the product has not set a minimum accuracy for a survey (`mobile-ui-spec.md` section 3.4). */
 export const MIN_GPS_ACCURACY_M = 25;
 
 export type HotspotFact = 'unknown' | 'on' | 'off';
+/** Whether the values from the Cantol's label (hotspot name and password, MAC address) are on the phone. */
+export type SetupFact = 'unknown' | 'missing' | 'saved';
 export type CantolFact = 'unknown' | 'searching' | 'found' | 'linked' | 'lost';
 
 export interface WizardState {
+  /** A build that asks for the label values starts with `unknown`; one that does not reports `saved` at once. */
+  setup: SetupFact;
+
   hotspot: HotspotFact;
   /** The operator chose "Continue anyway" although the hotspot was not detected. */
   hotspotAcknowledged: boolean;
@@ -63,6 +72,7 @@ export interface WizardState {
 }
 
 export const initialWizardState: WizardState = {
+  setup: 'unknown',
   hotspot: 'unknown',
   hotspotAcknowledged: false,
   hotspotLostAt: null,
@@ -83,6 +93,8 @@ export const initialWizardState: WizardState = {
 };
 
 export type WizardEvent =
+  | { type: 'SETUP_STATE'; saved: boolean }
+  | { type: 'CANTOL_FORGET' }
   | { type: 'HOTSPOT_STATUS'; on: boolean; at: number }
   | { type: 'HOTSPOT_CONTINUE_ANYWAY' }
   | { type: 'CANTOL_SEARCH_STARTED'; at: number }
@@ -105,6 +117,10 @@ function withinGrace(lostAt: number | null, now: number): boolean {
   return lostAt !== null && now - lostAt <= LINK_GRACE_MS;
 }
 
+export function setupMet(s: WizardState): boolean {
+  return s.setup === 'saved';
+}
+
 export function hotspotMet(s: WizardState): boolean {
   return s.hotspot === 'on' || s.hotspotAcknowledged || (s.hotspot === 'off' && withinGrace(s.hotspotLostAt, s.nowMs));
 }
@@ -119,17 +135,18 @@ export function gpsMet(s: WizardState): boolean {
   return withinGrace(s.gpsLostAt, s.nowMs);
 }
 
-/** The first unmet requirement, or READY / STREAMING when all three are met. */
+/** The first unmet requirement, or READY / STREAMING when all are met. */
 export function wizardStep(s: WizardState): WizardStep {
+  if (!setupMet(s)) return 'DEVICE_SETUP';
   if (!hotspotMet(s)) return s.hotspot === 'off' ? 'HOTSPOT_GUIDE' : 'HOTSPOT_CHECK';
   if (!cantolMet(s)) return s.cantol === 'found' ? 'CANTOL_PING' : 'CANTOL_DISCOVER';
   if (!gpsMet(s)) return 'LOCATION';
   return s.streaming ? 'STREAMING' : 'READY';
 }
 
-/** True once the quick checks (hotspot, GPS) have answered, so the first screen is not a guess. */
+/** True once the quick checks (saved label values, hotspot, GPS) have answered, so the first screen is not a guess. */
 export function wizardInitialised(s: WizardState): boolean {
-  return s.hotspot !== 'unknown' && s.gpsChecked && s.gpsServices !== 'unknown';
+  return s.setup !== 'unknown' && s.hotspot !== 'unknown' && s.gpsChecked && s.gpsServices !== 'unknown';
 }
 
 /** The 60 s help card (is Cantol powered, is its Wi-Fi set to the hotspot). */
@@ -144,6 +161,20 @@ export function needsClock(s: WizardState): boolean {
 
 export function wizardReducer(s: WizardState, event: WizardEvent): WizardState {
   switch (event.type) {
+    case 'SETUP_STATE':
+      return { ...s, setup: event.saved ? 'saved' : 'missing' };
+    case 'CANTOL_FORGET':
+      // The unit to look for changed (a new MAC address): drop the link and what was learned about it.
+      return {
+        ...s,
+        cantol: 'unknown',
+        cantolAddress: null,
+        cantolDeviceId: null,
+        rttMs: null,
+        searchStartedAt: null,
+        cantolLostAt: null,
+        streaming: false,
+      };
     case 'HOTSPOT_STATUS': {
       const now = Math.max(s.nowMs, event.at);
       if (event.on) return { ...s, hotspot: 'on', hotspotLostAt: null, nowMs: now };
@@ -177,6 +208,7 @@ export function wizardReducer(s: WizardState, event: WizardEvent): WizardState {
       // replace these guesses as soon as they answer; a fact that did answer is left alone.
       return {
         ...s,
+        setup: s.setup === 'unknown' ? 'missing' : s.setup,
         hotspot: s.hotspot === 'unknown' ? 'off' : s.hotspot,
         gpsChecked: true,
         gpsServices: s.gpsServices === 'unknown' ? 'off' : s.gpsServices,
@@ -214,13 +246,16 @@ export function wizardReducer(s: WizardState, event: WizardEvent): WizardState {
     case 'RESUME':
       return { ...s, checkRound: s.checkRound + 1 };
     case 'RESET':
-      return { ...initialWizardState };
+      // The label values belong to the device, not to the signed-in operator: they stay.
+      return { ...initialWizardState, setup: s.setup };
   }
 }
 
 /** The route that shows a step. Hotspot, Cantol and GPS screens have one each; READY and STREAMING share /device. */
 export function routeForStep(step: WizardStep): string {
   switch (step) {
+    case 'DEVICE_SETUP':
+      return '/setup/device';
     case 'HOTSPOT_CHECK':
     case 'HOTSPOT_GUIDE':
       return '/setup/hotspot';

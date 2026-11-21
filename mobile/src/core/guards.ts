@@ -18,6 +18,8 @@ export interface GuardContext {
 const NEEDS_READY = ['/device', '/live', '/track/setup', '/track'];
 
 function setupIndex(path: string): number | null {
+  // The label values can be edited at any time, so this screen is never "ahead" of the wizard.
+  if (path === '/setup/device') return 0;
   if (path === '/setup/hotspot') return 1;
   if (path === '/setup/cantol' || path.startsWith('/setup/cantol/')) return 2;
   if (path === '/setup/gps') return 3;
@@ -26,6 +28,8 @@ function setupIndex(path: string): number | null {
 
 function stepIndex(step: WizardStep): number {
   switch (step) {
+    case 'DEVICE_SETUP':
+      return 0;
     case 'HOTSPOT_CHECK':
     case 'HOTSPOT_GUIDE':
       return 1;
@@ -68,6 +72,8 @@ export function guardRedirect(path: string, ctx: GuardContext): string | null {
  */
 export function parentRoute(path: string): string {
   switch (path) {
+    case '/setup/device':
+      return '/setup/hotspot';
     case '/setup/cantol':
       return '/setup/hotspot';
     case '/setup/cantol/address':

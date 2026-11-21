@@ -1,6 +1,7 @@
 /** The real store: IndexedDB through Dexie. It survives the app being closed and reopened. */
 import Dexie, { type EntityTable } from 'dexie';
 
+import type { CantolSetup } from './cantolSetup';
 import type { Measurement, SavedSurvey, TrackingDraft } from './model';
 import type { AppStore } from './store';
 
@@ -10,6 +11,7 @@ interface SettingRow {
 }
 
 const OPERATOR_KEY = 'operator';
+const CANTOL_SETUP_KEY = 'cantol-setup';
 const DRAFT_ID = 'current';
 
 type AppDb = Dexie & {
@@ -35,6 +37,22 @@ export function createDexieStore(databaseName = 'everline-mobile'): AppStore {
     },
     clearOperator: async () => {
       await db.settings.delete(OPERATOR_KEY);
+    },
+    getCantolSetup: async () => {
+      const row = await db.settings.get(CANTOL_SETUP_KEY);
+      if (row === undefined) return null;
+      try {
+        const parsed = JSON.parse(row.value) as Partial<CantolSetup>;
+        // Only the three known fields; `createSetupSource` checks their values again.
+        return typeof parsed.ssid === 'string' && typeof parsed.password === 'string' && typeof parsed.mac === 'string'
+          ? { ssid: parsed.ssid, password: parsed.password, mac: parsed.mac }
+          : null;
+      } catch {
+        return null;
+      }
+    },
+    saveCantolSetup: async (setup) => {
+      await db.settings.put({ key: CANTOL_SETUP_KEY, value: JSON.stringify(setup) });
     },
     saveMeasurement: async (m) => {
       await db.measurements.put(m);

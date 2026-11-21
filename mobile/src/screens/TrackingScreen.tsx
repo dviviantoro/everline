@@ -58,9 +58,9 @@ function makeReducer(dsp: Dsp) {
   };
 }
 
-const SEVERITY_COLOUR: Record<Severity, string> = { normal: 'var(--text)', warning: 'var(--warn-text)', critical: 'var(--crit-text)' };
+export const SEVERITY_COLOUR: Record<Severity, string> = { normal: 'var(--text)', warning: 'var(--warn-text)', critical: 'var(--crit-text)' };
 
-function TrendChip({ trend }: { trend: 'rising' | 'falling' | 'steady' | null }) {
+export function TrendChip({ trend }: { trend: 'rising' | 'falling' | 'steady' | null }) {
   if (trend === null) return <span className="helper">Measuring</span>;
   const word = trend === 'rising' ? 'Rising' : trend === 'falling' ? 'Falling' : 'Steady';
   const icon = trend === 'rising' ? <ArrowUpIcon size={16} /> : trend === 'falling' ? <ArrowDownIcon size={16} /> : <SteadyIcon size={16} />;

@@ -93,8 +93,9 @@ function Step({
 }
 
 export function CantolScreen() {
-  const { hotspot } = useServices();
-  const { state, step, helpCard, manualAddress, discoveryError, retryDiscovery } = useWizard();
+  const { hotspot, setup } = useServices();
+  const { state, step, helpCard, manualAddress, discoveryError, labelProblem, retryDiscovery } = useWizard();
+  const expectedMac = setup?.current()?.mac ?? null;
   const found = state.cantol === 'found' || state.cantol === 'linked' || state.cantol === 'lost';
   const linked = state.cantol === 'linked' || state.cantol === 'lost';
   const pinging = step === 'CANTOL_PING';
@@ -117,6 +118,11 @@ export function CantolScreen() {
             Waiting for <span className="accent">Cantol.</span>
           </h1>
           <p className="lead">Power on the Cantol device. It joins your hotspot automatically.</p>
+          {expectedMac === null ? null : (
+            <p className="helper" style={{ marginTop: 8 }}>
+              Looking for the Cantol with MAC address <span className="mono">{expectedMac}</span>.
+            </p>
+          )}
         </>
       )}
 
@@ -154,7 +160,20 @@ export function CantolScreen() {
         </section>
       ) : null}
 
-      {helpCard && !found ? (
+      {expectedMac !== null && manualAddress === null && discoveryError !== null && !linked ? (
+        <section className="card stack" style={{ marginTop: 12, gap: 8 }} aria-label="Why the Cantol is not connected">
+          <p role="alert" style={{ margin: 0, fontSize: '0.9375rem', color: 'var(--crit-text)' }}>
+            {discoveryError}
+          </p>
+          {labelProblem ? (
+            <Link to="/setup/device" className="btn btn-secondary btn-sm">
+              Check the label values
+            </Link>
+          ) : null}
+        </section>
+      ) : null}
+
+      {helpCard && !found && !labelProblem ? (
         <section className="card" style={{ marginTop: 12 }} aria-label="Cantol was not found">
           <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Cantol has not answered for a minute.</h2>
           <p className="helper" style={{ margin: '6px 0 12px', fontSize: '0.875rem', lineHeight: 1.5 }}>

@@ -41,6 +41,22 @@ describe('the local store', () => {
     expect(await store.getOperator()).toBeNull();
   });
 
+  it('keeps the values from the Cantol label, through sign-out, until everything is erased', async () => {
+    const store = createMemoryStore();
+    const label = { ssid: 'CANTOL-1234', password: 'secret-pass-1', mac: '00:26:32:F0:1A:BC' };
+    expect(await store.getCantolSetup()).toBeNull();
+    await store.saveCantolSetup(label);
+    await store.setOperator('operator@example.com');
+    await store.clearOperator();
+    expect(await store.getCantolSetup()).toEqual(label);
+    // What is read back is a copy: changing it does not change what is stored.
+    const copy = await store.getCantolSetup();
+    if (copy) copy.ssid = 'changed';
+    expect((await store.getCantolSetup())?.ssid).toBe('CANTOL-1234');
+    await store.resetAll();
+    expect(await store.getCantolSetup()).toBeNull();
+  });
+
   it('lists surveys newest first', async () => {
     const store = createMemoryStore();
     await store.saveSurvey(survey('old', 100));

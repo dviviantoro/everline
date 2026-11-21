@@ -1,6 +1,6 @@
 /**
  * Entry point of the field build. `main.tsx` imports this only when `VITE_FIELD` is "1", so the
- * normal and demo bundles never contain the real adapters or the device profile.
+ * normal and demo bundles never contain the real adapters or the device profile (band and ports).
  */
 import { Geolocation } from '@capacitor/geolocation';
 import { StrictMode } from 'react';

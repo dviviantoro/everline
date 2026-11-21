@@ -5,6 +5,7 @@
  * Insert-only in spirit (`mobile-ui-spec.md` section 1): a saved survey's content is never
  * edited or deleted by the app. Only its local upload status changes after a try.
  */
+import type { CantolSetup } from './cantolSetup';
 import type { Measurement, SavedSurvey, TrackingDraft } from './model';
 
 export interface AppStore {
@@ -12,6 +13,14 @@ export interface AppStore {
   getOperator(): Promise<string | null>;
   setOperator(email: string): Promise<void>;
   clearOperator(): Promise<void>;
+
+  /**
+   * What the operator typed from the Cantol device's label (hotspot name and password, MAC
+   * address). It belongs to the device, not to the operator, so signing out keeps it. The
+   * password is stored as typed, in the app's own private storage; it is also printed on the label.
+   */
+  getCantolSetup(): Promise<CantolSetup | null>;
+  saveCantolSetup(setup: CantolSetup): Promise<void>;
 
   /** A recording waiting to be tagged. */
   saveMeasurement(measurement: Measurement): Promise<void>;
@@ -36,6 +45,7 @@ export interface AppStore {
 /** In-memory store for unit tests. */
 export function createMemoryStore(): AppStore {
   let operator: string | null = null;
+  let cantolSetup: CantolSetup | null = null;
   let measurements = new Map<string, Measurement>();
   let surveys = new Map<string, SavedSurvey>();
   let draft: TrackingDraft | null = null;
@@ -48,6 +58,11 @@ export function createMemoryStore(): AppStore {
     },
     clearOperator: () => {
       operator = null;
+      return Promise.resolve();
+    },
+    getCantolSetup: () => Promise.resolve(structuredClone(cantolSetup)),
+    saveCantolSetup: (setup) => {
+      cantolSetup = structuredClone(setup);
       return Promise.resolve();
     },
     saveMeasurement: (m) => {
@@ -81,6 +96,7 @@ export function createMemoryStore(): AppStore {
     },
     resetAll: () => {
       operator = null;
+      cantolSetup = null;
       measurements = new Map();
       surveys = new Map();
       draft = null;

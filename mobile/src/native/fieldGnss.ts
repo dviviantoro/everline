@@ -13,7 +13,15 @@ export interface GeolocationApi {
   checkPermissions(): Promise<PermissionStatus>;
   requestPermissions(): Promise<PermissionStatus>;
   watchPosition(
-    options: { enableHighAccuracy: boolean; timeout: number; maximumAge: number },
+    options: {
+      enableHighAccuracy: boolean;
+      timeout: number;
+      maximumAge: number;
+      /** How often the plugin asks the system for a position. It defaults to `timeout`, which is far too slow. */
+      interval: number;
+      /** The fastest the plugin passes positions on. It defaults to 5 s, which would cap `interval`. */
+      minimumUpdateInterval: number;
+    },
     callback: (position: GeoPosition | null, error?: unknown) => void,
   ): Promise<string>;
   clearWatch(options: { id: string }): Promise<void>;
@@ -44,8 +52,20 @@ export function isLocationDisabled(error: unknown): boolean {
   return code === LOCATION_DISABLED_CODE || (error instanceof Error && /location services are not enabled/i.test(error.message));
 }
 
-/** A second request for the settings screen within this long is the same request (two steps of one tap). */
-const SETTINGS_DEBOUNCE_MS = 3000;
+/**
+ * How often a position is asked for while watching. Left alone, `@capacitor/geolocation` uses the
+ * `timeout` (10 s) as the interval and 5 s as the fastest rate, so a fix arrived about every 10 s
+ * while the app declares "no fix" after 5 s of silence (`NO_FIX_AFTER_MS`): the status flickered
+ * between "on" and "no fix" on a phone with a good signal. One second keeps it well inside.
+ */
+export const GPS_WATCH_INTERVAL_MS = 1000;
+
+/**
+ * A second request for the settings screen within this long is the same request: one tap on "Enable
+ * GPS" asks for the permission and then for location services, a native round trip apart. Kept short,
+ * because a person who comes back and taps again a moment later must get the screen again.
+ */
+export const SETTINGS_DEBOUNCE_MS = 1000;
 
 export function createFieldGnss(geolocation: GeolocationApi, helper: GnssHelperNative, now: () => number): Gnss {
   let settingsOpenedAt = -Infinity;
@@ -92,16 +112,25 @@ export function createFieldGnss(geolocation: GeolocationApi, helper: GnssHelperN
       let id: string | null = null;
       let stopped = false;
       void geolocation
-        .watchPosition({ enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 }, (position) => {
-          if (stopped || position === null) return;
-          const fix: GpsFix = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracyM: position.coords.accuracy,
-            at: now(),
-          };
-          onFix(fix);
-        })
+        .watchPosition(
+          {
+            enableHighAccuracy: true,
+            timeout: 10_000,
+            maximumAge: 0,
+            interval: GPS_WATCH_INTERVAL_MS,
+            minimumUpdateInterval: GPS_WATCH_INTERVAL_MS,
+          },
+          (position) => {
+            if (stopped || position === null) return;
+            const fix: GpsFix = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracyM: position.coords.accuracy,
+              at: now(),
+            };
+            onFix(fix);
+          },
+        )
         .then((watchId) => {
           if (stopped) void geolocation.clearWatch({ id: watchId });
           else id = watchId;

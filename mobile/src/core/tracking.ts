@@ -214,7 +214,7 @@ function whereText(session: TrackingSession): string {
 export function guidanceSentence(
   kind: GuidanceKind | null,
   trend: Trend | null,
-  peak: { label: StationLabel; value: number } | null,
+  peak: { label: string; value: number } | null,
   distanceToPeakM: number | null,
 ): string {
   if (kind === 'go_back' && peak) {

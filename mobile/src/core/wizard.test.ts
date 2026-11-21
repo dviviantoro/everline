@@ -17,7 +17,10 @@ import {
   type WizardStep,
 } from './wizard';
 
-function run(events: WizardEvent[], from: WizardState = initialWizardState): WizardState {
+/** A build whose label values are already on the phone (the demo, or a returning operator): the wizard starts from here. */
+const started: WizardState = { ...initialWizardState, setup: 'saved' };
+
+function run(events: WizardEvent[], from: WizardState = started): WizardState {
   return events.reduce(wizardReducer, from);
 }
 
@@ -38,13 +41,13 @@ const ready = (): WizardState => run([hotspotOn, ...cantolLinked, ...gpsGood]);
 
 describe('wizard steps follow the first unmet requirement', () => {
   it('starts unknown and not initialised', () => {
-    expect(wizardStep(initialWizardState)).toBe('HOTSPOT_CHECK');
-    expect(wizardInitialised(initialWizardState)).toBe(false);
+    expect(wizardStep(started)).toBe('HOTSPOT_CHECK');
+    expect(wizardInitialised(started)).toBe(false);
   });
 
   it('walks hotspot, Cantol, GPS, ready in the order ADR-006 sets', () => {
     const seen: WizardStep[] = [];
-    let s = initialWizardState;
+    let s = started;
     const feed = (e: WizardEvent) => {
       s = wizardReducer(s, e);
       seen.push(wizardStep(s));
@@ -91,6 +94,46 @@ describe('wizard steps follow the first unmet requirement', () => {
   it('lets the operator go on without a detected hotspot ("Continue anyway")', () => {
     const s = run([{ type: 'HOTSPOT_STATUS', on: false, at: T0 }, { type: 'HOTSPOT_CONTINUE_ANYWAY' }]);
     expect(wizardStep(s)).toBe('CANTOL_DISCOVER');
+  });
+});
+
+describe('the values from the Cantol label are asked for first', () => {
+  const answered: WizardEvent[] = [hotspotOn, { type: 'GPS_PERMISSION', permission: 'granted' }, { type: 'GPS_SERVICES', enabled: true }];
+
+  it('starts at DEVICE_SETUP, not initialised until the saved values have been looked for', () => {
+    expect(wizardStep(initialWizardState)).toBe('DEVICE_SETUP');
+    expect(routeForStep('DEVICE_SETUP')).toBe('/setup/device');
+    expect(setupStepNumber('DEVICE_SETUP')).toBeNull();
+    expect(wizardInitialised(run(answered, initialWizardState))).toBe(false);
+    expect(wizardInitialised(run([...answered, { type: 'SETUP_STATE', saved: false }], initialWizardState))).toBe(true);
+  });
+
+  it('asks for them before anything else, even when the hotspot is on and Cantol is linked', () => {
+    const s = run([...answered, ...cantolLinked, ...gpsGood, { type: 'SETUP_STATE', saved: false }], initialWizardState);
+    expect(wizardStep(s)).toBe('DEVICE_SETUP');
+    expect(wizardStep(wizardReducer(s, { type: 'SETUP_STATE', saved: true }))).toBe('READY');
+  });
+
+  it('goes on to the hotspot once they are saved', () => {
+    const s = run([{ type: 'SETUP_STATE', saved: true }], initialWizardState);
+    expect(wizardStep(s)).toBe('HOTSPOT_CHECK');
+  });
+
+  it('a read that never answers counts as "nothing saved", so the operator can type them', () => {
+    expect(run([{ type: 'CHECKS_GAVE_UP' }], initialWizardState).setup).toBe('missing');
+    expect(run([{ type: 'SETUP_STATE', saved: true }, { type: 'CHECKS_GAVE_UP' }], initialWizardState).setup).toBe('saved');
+  });
+
+  it('survives a reset (they belong to the device, not to the signed-in operator)', () => {
+    expect(wizardReducer({ ...ready(), setup: 'saved' }, { type: 'RESET' }).setup).toBe('saved');
+  });
+
+  it('forgetting the Cantol drops the link and the search, nothing else', () => {
+    const before = ready();
+    const after = wizardReducer(before, { type: 'CANTOL_FORGET' });
+    expect(after).toMatchObject({ cantol: 'unknown', cantolAddress: null, cantolDeviceId: null, rttMs: null, searchStartedAt: null, cantolLostAt: null });
+    expect(after).toMatchObject({ hotspot: 'on', gpsPermission: 'granted', setup: 'saved' });
+    expect(wizardStep(after)).toBe('CANTOL_DISCOVER');
   });
 });
 
@@ -186,7 +229,7 @@ describe('idempotent checks and resume', () => {
   });
 
   it('RESET returns to the start', () => {
-    expect(run([{ type: 'RESET' }], ready())).toEqual(initialWizardState);
+    expect(run([{ type: 'RESET' }], ready())).toEqual(started);
   });
 });
 
