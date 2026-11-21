@@ -1,0 +1,7 @@
+{
+  "_note": "Copy to redpitaya.local.json (git ignores it) and fill in. Used by scripts/rp.sh. Never commit the real file.",
+  "host": "rp-XXXXXX.local",
+  "user": "root",
+  "password": "CHANGE-ME",
+  "remote_dir": "/cantol"
+}

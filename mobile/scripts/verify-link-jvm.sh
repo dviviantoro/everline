@@ -16,7 +16,7 @@ mock=$!
 trap 'kill "$mock" 2>/dev/null || true' EXIT
 sleep 1
 
-# `export` of the two lines the helper prints: CANTOL_HELLO_HEX and CANTOL_PING_HEX.
+# `export` of the lines the helper prints: CANTOL_HELLO_HEX, CANTOL_PING_HEX, CANTOL_START_HEX and CANTOL_STOP_HEX.
 while IFS= read -r line; do export "$line"; done < <(node scripts/link-frames-hex.mjs)
 export CANTOL_MOCK_PORT="$port"
 

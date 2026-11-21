@@ -21,3 +21,7 @@ src/wasm-pkg/
 *.jks
 *.keystore
 keystore.properties
+
+# Python bytecode from the device program and its tests
+__pycache__/
+*.pyc

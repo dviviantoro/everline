@@ -7,11 +7,17 @@
 //     `connect` over real TCP to the real `cantol-mock`;
 //   - the Java plugins themselves are checked separately (scripts/verify-link-jvm.sh).
 //
-// It walks sign in, hotspot off then on, finding and linking Cantol, the location permission being
+// It walks sign in, the label screen (hotspot name, password and MAC address typed from the Cantol's
+// label: validation, a wrong MAC address being refused and then corrected, edits and a restart),
+// hotspot off then on, finding and linking Cantol, the location permission being
 // refused twice and then allowed, location services off then on, the Ready screen, a lost and a
-// restored link, and a restart; it asserts what the field build must NOT offer (measurement), that
-// only the local origin is requested, and that the console stays quiet. It does not replace a
-// phone: nothing here runs the Android WebView, the real hotspot, Wi-Fi or GPS.
+// restored link, and a restart. It then opens the Live screen: Start goes to the mock, the mock's
+// pulses come back through the stand-in as `frame` events and are read by the Rust codec, the plot
+// and tiles fill, the "Test data" banner shows (the mock says its data is generated), leaving the
+// screen sends Stop, a lost and restored link asks for the stream again, and a Start that cannot be
+// sent or a silent device is shown. It asserts what the field build must NOT offer (Record, Tracking,
+// Surveys), that only the local origin is requested, and that the console stays quiet. It does not
+// replace a phone: nothing here runs the Android WebView, the real hotspot, Wi-Fi or GPS.
 //
 //   cargo build -p cantol-mock   (in mobile/rust)  &&  node scripts/verify-field-web.mjs [--out <dir>]
 //
@@ -19,12 +25,13 @@
 /* global window, document */
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright-core';
+
+import { CRC_LEN, createPhone, HEADER_LEN, HEADERS, watchTimers } from './lib/phone-standin.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -35,6 +42,11 @@ const URL_BASE = `http://localhost:${String(PREVIEW_PORT)}/`;
 const MOCK = join(root, 'rust', 'target', 'debug', 'cantol-mock');
 // The port in config/device-profile.example.json, which the build uses when no local profile exists.
 const MOCK_PORT = 47000;
+// What cantol-mock reports as its MAC address by default, and what the walk types from the "label".
+const MOCK_MAC = '02:CA:57:00:00:01';
+const WRONG_MAC = '02:CA:57:00:00:99';
+const LABEL_SSID = 'CANTOL-1234';
+const LABEL_PASSWORD = 'hotspot-pass-1';
 const BRIDGE = join(root, 'node_modules', '@capacitor', 'android', 'capacitor', 'src', 'main', 'assets', 'native-bridge.js');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -62,267 +74,7 @@ function expect(condition, message) {
   if (!condition) failures.push(message);
 }
 
-// ---------------------------------------------------------------------------------------------
-// The stand-in for the Android side
-
-/** What Capacitor's Android side injects so `registerPlugin` knows each plugin's methods. */
-const promise = (...names) => names.map((name) => ({ name, rtype: 'promise' }));
-const events = [{ name: 'addListener', rtype: 'none' }, { name: 'removeListener', rtype: 'none' }];
-const HEADERS = [
-  { name: 'HotspotAssistant', methods: promise('isOn', 'openSettings') },
-  {
-    name: 'CantolLink',
-    methods: [...promise('scan', 'listenBeacon', 'exchange', 'connect', 'disconnect', 'linkStatus', 'getLastKnown', 'setLastKnown', 'diagnostics'), ...events],
-  },
-  { name: 'GnssHelper', methods: promise('servicesEnabled', 'permissionState', 'openLocationSettings', 'openAppSettings') },
-  {
-    name: 'Geolocation',
-    methods: [...promise('checkPermissions', 'requestPermissions', 'getCurrentPosition', 'clearWatch'), { name: 'watchPosition', rtype: 'callback' }],
-  },
-  { name: 'App', methods: [...promise('exitApp', 'getInfo', 'getState'), ...events] },
-  { name: 'StatusBar', methods: promise('setStyle', 'setBackgroundColor', 'setOverlaysWebView', 'show', 'hide', 'getInfo') },
-];
-
-const HEADER_LEN = 21;
-const CRC_LEN = 4;
-
-/** One whole frame from a socket, by the length prefix (a test double of what FrameIo does in Java). */
-function readFrame(socket, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    let buf = Buffer.alloc(0);
-    const timer = setTimeout(() => finish(new Error('Read timed out'), 'timeout'), timeoutMs);
-    const finish = (error, code, frame) => {
-      clearTimeout(timer);
-      socket.off('data', onData);
-      socket.off('error', onError);
-      socket.off('close', onClose);
-      if (error) reject(Object.assign(error, { code }));
-      else resolve(frame);
-    };
-    const onData = (chunk) => {
-      buf = Buffer.concat([buf, chunk]);
-      if (buf.length >= HEADER_LEN) {
-        if (buf[0] !== 0x57 || buf[1] !== 0xca) return finish(new Error('not a Cantol frame (bad magic)'), 'io');
-        const total = HEADER_LEN + buf.readUInt32LE(17) + CRC_LEN;
-        if (buf.length >= total) finish(null, null, buf.subarray(0, total));
-      }
-    };
-    const onError = (error) => finish(error, 'io');
-    const onClose = () => finish(new Error('the link was closed'), 'io');
-    socket.on('data', onData);
-    socket.once('error', onError);
-    socket.once('close', onClose);
-  });
-}
-
-function connectSocket(host, port, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const socket = net.connect({ host, port });
-    const timer = setTimeout(() => {
-      socket.destroy();
-      reject(Object.assign(new Error('Connect timed out'), { code: 'timeout' }));
-    }, timeoutMs);
-    socket.once('connect', () => {
-      clearTimeout(timer);
-      socket.setNoDelay(true);
-      resolve(socket);
-    });
-    socket.once('error', (error) => {
-      clearTimeout(timer);
-      reject(Object.assign(error, { code: error.code === 'ECONNREFUSED' ? 'refused' : 'io' }));
-    });
-  });
-}
-
-/** Every GPS watch timer, so the process can end. */
-const watchTimers = new Set();
-
-function createPhone(respond) {
-  const phone = {
-    hotspotOn: false,
-    // A fresh phone: location services are off. The real geolocation plugin then REJECTS both of its
-    // permission calls (OS-PLUG-GLOC-0007), which is what once left the app stuck on the welcome screen.
-    locationOn: false,
-    // A plugin that fails outright, to prove no failing check can trap the app on the welcome screen.
-    gnssBroken: true,
-    permission: 'prompt',
-    permissionRequests: 0,
-    blockExchange: false,
-    lastKnown: undefined,
-    held: null,
-    heldHost: null,
-    lastRx: 0,
-    heldRtt: NaN,
-    heartbeat: null,
-    heldPort: MOCK_PORT,
-    calls: [],
-    exchanged: [],
-    connects: [],
-    scans: [],
-    listeners: [],
-    watchers: new Map(),
-  };
-
-  const emit = (pluginId, eventName, data) => {
-    for (const l of phone.listeners) {
-      if (l.pluginId === pluginId && l.eventName === eventName) {
-        respond({ callbackId: l.callbackId, pluginId, methodName: eventName, success: true, data, save: true });
-      }
-    }
-  };
-
-  async function hold(host, port, heartbeat) {
-    const socket = await connectSocket(host, port, 1500);
-    const started = Date.now();
-    socket.write(heartbeat);
-    await readFrame(socket, 2000);
-    phone.heldRtt = Date.now() - started;
-    phone.lastRx = Date.now();
-    // Whatever the mock sends from now on (its periodic status) proves the link is alive.
-    socket.on('data', () => {
-      phone.lastRx = Date.now();
-    });
-    socket.on('error', () => undefined);
-    phone.held = socket;
-    phone.heldHost = host;
-    phone.heldPort = port;
-    phone.heartbeat = heartbeat;
-    return phone.heldRtt;
-  }
-
-  phone.loseLink = () => {
-    phone.blockExchange = true;
-    phone.held?.destroy();
-    phone.held = null;
-    emit('CantolLink', 'linkState', { state: 'lost', detail: 'no answer within 2000 ms' });
-  };
-  phone.restoreLink = async () => {
-    phone.blockExchange = false;
-    if (phone.heldHost !== null) await hold(phone.heldHost, phone.heldPort, phone.heartbeat);
-    emit('CantolLink', 'linkState', { state: 'up', detail: 'reconnected' });
-  };
-
-  /** What the real geolocation plugin does in checkPermissions and requestPermissions (read from its source). */
-  phone.requireLocationOn = () => {
-    if (phone.gnssBroken) throw new Error('simulated plugin failure');
-    if (!phone.locationOn) throw Object.assign(new Error('Location services are not enabled.'), { code: 'OS-PLUG-GLOC-0007' });
-  };
-
-  phone.handle = async ({ pluginId, methodName, options, callbackId }) => {
-    phone.calls.push(`${pluginId}.${methodName}`);
-    if (methodName === 'addListener') {
-      phone.listeners.push({ pluginId, eventName: options.eventName, callbackId });
-      return undefined; // kept alive; events arrive later
-    }
-    if (methodName === 'removeListener') {
-      // Capacitor passes the original listener as this call's own callback, so a reply here would
-      // fire it (a "backButton" listener would navigate back). The real Android side stays silent.
-      phone.listeners = phone.listeners.filter((l) => l.callbackId !== options.callbackId);
-      return undefined;
-    }
-    const key = `${pluginId}.${methodName}`;
-    switch (key) {
-      case 'HotspotAssistant.isOn':
-        return phone.hotspotOn ? { on: true, iface: 'ap0', address: '127.0.0.1', prefix: 24 } : { on: false };
-      case 'HotspotAssistant.openSettings':
-        setTimeout(() => {
-          phone.hotspotOn = true;
-        }, 1500);
-        return { index: 0, label: 'Tethering settings', exact: true };
-      case 'CantolLink.scan':
-        phone.scans.push(options);
-        await sleep(300);
-        return phone.hotspotOn ? { subnet: '127.0.0.1/24', scanned: 253, hosts: ['127.0.0.1'] } : { scanned: 0, hosts: [] };
-      case 'CantolLink.listenBeacon':
-        await sleep(options.timeoutMs ?? 1500);
-        return { timedOut: true };
-      case 'CantolLink.exchange': {
-        phone.exchanged.push({ host: options.host, port: options.port, frame: Buffer.from(options.dataB64, 'base64') });
-        if (phone.blockExchange) throw Object.assign(new Error('Read timed out'), { code: 'timeout' });
-        const socket = await connectSocket(options.host, options.port, options.connectTimeoutMs ?? 800);
-        try {
-          const started = process.hrtime.bigint();
-          socket.write(Buffer.from(options.dataB64, 'base64'));
-          const frame = await readFrame(socket, options.readTimeoutMs ?? 1500);
-          return { replyB64: frame.toString('base64'), rttMs: Number(process.hrtime.bigint() - started) / 1e6 };
-        } finally {
-          socket.destroy();
-        }
-      }
-      case 'CantolLink.connect': {
-        const heartbeat = Buffer.from(options.heartbeatB64, 'base64');
-        phone.connects.push({ host: options.host, port: options.port, heartbeat, intervalMs: options.intervalMs });
-        const rttMs = await hold(options.host, options.port, heartbeat);
-        phone.lastKnown = options.host;
-        return { rttMs };
-      }
-      case 'CantolLink.disconnect':
-        phone.held?.destroy();
-        phone.held = null;
-        phone.heldHost = null;
-        return {};
-      case 'CantolLink.linkStatus':
-        return phone.held === null
-          ? { connected: false }
-          : { connected: true, host: phone.heldHost, lastRxAgeMs: Date.now() - phone.lastRx, rttMs: phone.heldRtt };
-      case 'CantolLink.getLastKnown':
-        return phone.lastKnown === undefined ? {} : { address: phone.lastKnown };
-      case 'CantolLink.setLastKnown':
-        phone.lastKnown = options.address;
-        return {};
-      case 'CantolLink.diagnostics':
-        return { rows: [{ label: 'Hotspot interface', value: phone.hotspotOn ? 'ap0 127.0.0.1/24' : 'none found' }] };
-      case 'GnssHelper.servicesEnabled':
-        if (phone.gnssBroken) throw new Error('simulated plugin failure');
-        return { enabled: phone.locationOn };
-      case 'GnssHelper.permissionState':
-        return { fine: phone.permission === 'granted', coarse: phone.permission === 'granted' };
-      case 'GnssHelper.openLocationSettings':
-        setTimeout(() => {
-          phone.locationOn = true;
-        }, 1000);
-        return {};
-      case 'GnssHelper.openAppSettings':
-        // The operator allows location in the app's settings and comes back.
-        setTimeout(() => {
-          phone.permission = 'granted';
-        }, 800);
-        return {};
-      case 'Geolocation.checkPermissions':
-        phone.requireLocationOn();
-        return { location: phone.permission, coarseLocation: phone.permission };
-      case 'Geolocation.requestPermissions':
-        phone.requireLocationOn();
-        phone.permissionRequests += 1;
-        // Android: "prompt" -> refused once -> "prompt-with-rationale" -> refused again -> "denied" (blocked).
-        if (phone.permission !== 'granted') phone.permission = phone.permissionRequests === 1 ? 'prompt-with-rationale' : 'denied';
-        return { location: phone.permission, coarseLocation: phone.permission };
-      case 'Geolocation.watchPosition': {
-        const timer = setInterval(() => {
-          if (!phone.locationOn || phone.permission !== 'granted') return;
-          respond({
-            callbackId,
-            pluginId,
-            methodName,
-            success: true,
-            save: true,
-            data: { timestamp: Date.now(), coords: { latitude: -6.8897, longitude: 109.6753, accuracy: 6.2 } },
-          });
-        }, 600);
-        phone.watchers.set(callbackId, timer);
-        watchTimers.add(timer);
-        return undefined;
-      }
-      case 'Geolocation.clearWatch':
-        clearInterval(phone.watchers.get(options.id));
-        phone.watchers.delete(options.id);
-        return {};
-      default:
-        return {}; // App, StatusBar and anything else the shell calls: accepted, nothing to do
-    }
-  };
-  return phone;
-}
+// The stand-in for the Android side lives in lib/phone-standin.mjs.
 
 // ---------------------------------------------------------------------------------------------
 
@@ -330,9 +82,6 @@ async function main() {
   const exe = findChromium();
   if (!exe) throw new Error('No Chromium found. Set CHROMIUM_PATH or download one with Playwright.');
   if (!existsSync(MOCK)) throw new Error('cantol-mock is not built: run `cargo build -p cantol-mock` in mobile/rust');
-  if (existsSync(join(root, 'config', 'device-profile.local.json'))) {
-    notes.push('config/device-profile.local.json exists: the build below embeds it, and the screenshots show its network name');
-  }
 
   const distDir = join(tmpdir(), 'everline-field-dist');
   rmSync(distDir, { recursive: true, force: true });
@@ -343,7 +92,7 @@ async function main() {
   });
   mkdirSync(outDir, { recursive: true });
 
-  const mock = spawn(MOCK, ['--bind', '127.0.0.1', '--port', String(MOCK_PORT), '--no-beacon'], { stdio: 'ignore' });
+  const mock = spawn(MOCK, ['--bind', '127.0.0.1', '--port', String(MOCK_PORT), '--no-beacon', '--sensors', '3'], { stdio: 'ignore' });
   const server = spawn('npx', ['vite', 'preview', '--outDir', distDir, '--port', String(PREVIEW_PORT), '--strictPort'], {
     cwd: root,
     stdio: 'ignore',
@@ -436,25 +185,85 @@ async function main() {
     await snap('welcome-still-checking');
     phone.gnssBroken = false;
 
+    // ----- The label screen: asked first, because nothing is saved on this phone yet.
+    await until('the label screen', () => hash() === '#/setup/device', 15000);
+    await page.getByRole('heading', { name: /Enter the Cantol label/ }).waitFor({ timeout: 5000 });
+    expect(!(await visible(page.getByRole('link', { name: /Hotspot/ }))), 'the first run has nowhere to go back to');
+    await snap('label-empty');
+    await page.getByRole('button', { name: 'Save and continue' }).click();
+    for (const message of [
+      'Enter the network name from the Cantol label.',
+      'Enter the password from the Cantol label.',
+      'Enter the MAC address from the Cantol label.',
+    ]) {
+      expect((await body()).includes(message), `an empty form should say: ${message}`);
+    }
+    expect(hash() === '#/setup/device', 'an empty form must not be saved');
+    await page.getByLabel('Network name (SSID)').fill(`  ${LABEL_SSID}  `);
+    await page.getByLabel('Hotspot password').fill('short');
+    await page.getByLabel('Cantol MAC address').fill('02:CA:57');
+    await page.getByRole('button', { name: 'Save and continue' }).click();
+    expect((await body()).includes('A hotspot password is 8 to 63 characters.'), 'a short password should be explained');
+    expect((await body()).includes('A MAC address is twelve digits or letters A to F'), 'a short MAC address should be explained');
+    expect(!(await body()).includes('short'), 'a message must not repeat the password');
+    await snap('label-errors');
+    // The password is hidden until asked for.
+    const passwordField = page.getByLabel('Hotspot password');
+    await passwordField.fill(LABEL_PASSWORD);
+    expect((await passwordField.getAttribute('type')) === 'password', 'the password is hidden by default');
+    await page.getByRole('button', { name: 'Show' }).click();
+    expect((await passwordField.getAttribute('type')) === 'text', 'Show reveals the password');
+    await page.getByRole('button', { name: 'Hide' }).click();
+    // A wrong MAC address first, typed the way a label is often read: lower case with dashes.
+    await page.getByLabel('Cantol MAC address').fill(WRONG_MAC.toLowerCase().replaceAll(':', '-'));
+    await page.getByLabel('Cantol MAC address').blur();
+    expect((await page.getByLabel('Cantol MAC address').inputValue()) === WRONG_MAC, 'the MAC address is tidied when the field is left');
+    await snap('label-filled');
+    await page.getByRole('button', { name: 'Save and continue' }).click();
+
     // ----- Hotspot: off, then on
     await until('the hotspot screen', () => hash() === '#/setup/hotspot', 15000);
     await until('the open-settings button', () => visible(page.getByRole('button', { name: 'Open hotspot settings' })));
-    expect((await body()).includes('CANTOL-EXAMPLE'), 'the setup card should show the profile network name');
+    let hotspotText = await body();
+    expect(hotspotText.includes(LABEL_SSID) && hotspotText.includes(WRONG_MAC), 'the hotspot screen should show what was typed from the label');
+    expect(!hotspotText.includes(LABEL_PASSWORD), 'the password is shown as dots, never in full');
+    expect(!hotspotText.includes('CANTOL-EXAMPLE'), 'no example values may be shown');
     await snap('hotspot-off');
     await page.getByRole('button', { name: 'Open hotspot settings' }).click();
     await until('the settings intent', () => phone.calls.includes('HotspotAssistant.openSettings'), 3000);
     await until('the wizard to move on once the hotspot is on', () => hash() === '#/setup/cantol', 12000);
+
+    // ----- A different Cantol answers: the typed MAC address is wrong, so it is refused and the
+    // operator is sent to the label values. Nothing is connected.
+    await until('the wrong-device message', async () => (await body()).includes(`not the ${WRONG_MAC} you entered`), 25000);
+    await snap('cantol-wrong-mac');
+    const wrongText = await body();
+    expect(wrongText.includes(`MAC address ${MOCK_MAC}`), 'the message should say which address the device reported');
+    expect(wrongText.includes(`Looking for the Cantol with MAC address ${WRONG_MAC}`), 'the Cantol screen should say which MAC address it looks for');
+    expect(phone.connects.length === 0, 'a refused device must not be connected');
+    expect(!(await visible(page.getByRole('heading', { name: /connected/i }))), 'a refused device must not look connected');
+    expect(!wrongText.includes('has not answered for a minute'), 'the "not answered" help would mislead: something did answer');
+    await page.getByRole('link', { name: 'Check the label values' }).click();
+    await until('the label screen again', () => hash() === '#/setup/device');
+    expect((await page.getByLabel('Network name (SSID)').inputValue()) === LABEL_SSID, 'the saved name should be filled in');
+    expect((await page.getByLabel('Cantol MAC address').inputValue()) === WRONG_MAC, 'the saved MAC address should be filled in');
+    expect(await visible(page.getByRole('link', { name: /Hotspot/ })), 'editing can go back');
+    await snap('label-edit');
+    await page.getByLabel('Cantol MAC address').fill(MOCK_MAC.replaceAll(':', '').toLowerCase());
+    await page.getByRole('button', { name: 'Save' }).click();
+    await until('the Cantol screen after the correction', () => hash() === '#/setup/cantol', 8000);
 
     // ----- Cantol: found by the scan, verified by a real HELLO and PONG, linked
     await snap('cantol-searching');
     await until('Cantol to connect', () => visible(page.getByRole('heading', { name: /connected/i })), 25000);
     await snap('cantol-connected');
     expect(phone.scans.length > 0 && phone.scans[0].port === MOCK_PORT, `the scan should use the profile port, got ${JSON.stringify(phone.scans[0])}`);
-    expect(phone.exchanged.length >= 4, `expected a HELLO to verify and three to ping, saw ${String(phone.exchanged.length)}`);
+    expect(phone.exchanged.length >= 5, `expected HELLOs to the wrong unit, to verify and three to ping, saw ${String(phone.exchanged.length)}`);
     expect(phone.exchanged.every((e) => e.frame[3] === 0x01), 'every exchange should be a HELLO frame');
     expect(phone.connects.length === 1 && phone.connects[0].heartbeat[3] === 0x30, 'the held link should open once, with a PING frame as its heartbeat');
     expect(phone.lastKnown === '127.0.0.1', 'the address that worked should be remembered');
     expect((await body()).includes('127.0.0.1'), 'the Cantol screen should show the address found');
+    expect(!(await body()).includes('you entered'), 'the wrong-device message must go once the right MAC address is saved');
 
     // ----- GPS, from a phone with location OFF: Enable GPS first sends the operator to turn it on (the
     // geolocation plugin cannot ask for the permission until then); then the permission is refused,
@@ -488,13 +297,27 @@ async function main() {
     await until('the Ready screen', () => hash() === '#/device');
     await snap('ready');
     const ready = await body();
-    expect(ready.includes('CANTOL-EXAMPLE') && ready.includes('127.0.0.1') && /±6 m/.test(ready), 'the Ready screen should show the hotspot, the Cantol address and the GPS accuracy');
+    expect(ready.includes(LABEL_SSID) && ready.includes('127.0.0.1') && /±6 m/.test(ready), 'the Ready screen should show the hotspot, the Cantol address and the GPS accuracy');
     expect((ready.match(/Connected/g) ?? []).length >= 1 && !ready.includes('Reconnecting'), 'the Cantol row should say Connected');
     const start = page.getByRole('button', { name: 'Start measurement' });
-    expect(await start.isDisabled(), '"Start measurement" must be disabled in the field build');
-    expect(ready.includes('Live measurement and upload come in a later release'), 'the Ready screen should say measurement is not in this release');
-    expect(!(await visible(page.locator('nav[aria-label="Main"]'))), 'the tab bar must not be offered');
-    for (const route of ['/live', '/surveys', '/tag', '/track/setup', '/track']) {
+    expect(!(await start.isDisabled()), '"Start measurement" must be enabled once the hotspot, Cantol and location are all up');
+    expect(/ready to measure/i.test(ready), 'the Ready screen should say "Ready to measure"');
+    expect(!ready.includes('Measurement is not in this version') && !ready.includes('Setup complete'), 'the old "not in this version" wording must be gone');
+    // The location row must stay "On" while fixes keep coming: the app was asking the plugin for a fix every 10 s
+    // while it calls 5 s of silence "no fix", so the row flickered on a phone with a good signal.
+    const watch = phone.watchOptions.at(-1);
+    expect(watch !== undefined && watch.interval <= 2000 && watch.minimumUpdateInterval <= 2000, `the watch must ask for a fix at least every 2 s, asked ${JSON.stringify(watch)}`);
+    let flickers = 0;
+    for (let i = 0; i < 48; i += 1) {
+      if ((await body()).includes('No fix')) flickers += 1;
+      await sleep(250);
+    }
+    expect(flickers === 0, `the Location row said "No fix" in ${String(flickers)} of 48 checks over 12 s while fixes were arriving`);
+    // No survey server in this build: two tabs, and the screens that record against it lead back here
+    // (Tracking is not one of them: it walks free, below).
+    const tabs = await page.locator('nav[aria-label="Main"] a').allInnerTexts();
+    expect(tabs.join('|') === 'Device|Live', `the tab bar should offer Device and Live only, offered: ${tabs.join(', ')}`);
+    for (const route of ['/surveys', '/tag']) {
       await page.evaluate((r) => {
         window.location.hash = r;
       }, route);
@@ -502,6 +325,149 @@ async function main() {
       expect(hash() === '#/device', `${route} must lead back to the Ready screen, was ${hash()}`);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'the Ready screen must not scroll sideways');
+
+    // ----- Live: Start goes to the mock, its pulses come back as frames, read by the Rust codec
+    const startsSent = () => phone.sent.filter((f) => f[3] === 0x20).length;
+    const stopsSent = () => phone.sent.filter((f) => f[3] === 0x21).length;
+    await start.click();
+    await until('the Live screen', () => hash() === '#/live');
+    await until('a Start frame to reach the Cantol', () => startsSent() === 1, 5000);
+    expect(phone.sent[0].length === HEADER_LEN + CRC_LEN, 'the Start frame is an empty control frame');
+    await until('the "Test data" banner (the mock says its data is generated)', async () => (await body()).includes('Test data.'), 8000);
+    await until('pulses on the plot', async () => (await page.locator('svg.chart circle').count()) > 10, 8000);
+    await sleep(1500);
+    await snap('live');
+    const liveText = await body();
+    const tile = async (label) => {
+      const text = await page.locator('.tile', { hasText: label }).first().innerText();
+      return Number.parseFloat(text.replace(new RegExp(label, 'i'), '').replace(/[^\d.-]+/g, ' ').trim().split(' ')[0]);
+    };
+    const peak = await tile('Peak');
+    const rate = await tile('Rate');
+    const noise = await tile('Noise');
+    // The mock's pulses are 50 to 4000 counts; with the placeholder calibration the loudest in 10 s is near 52 dBmV,
+    // its rate is 200 a second and its noise floor 60 to 80 counts (15.6 to 18.1 dBmV).
+    expect(peak >= 40 && peak <= 52.1, `the Peak tile should read the loudest pulse in dBmV, read ${String(peak)}`);
+    expect(rate === 200, `the Rate tile should read the mock's 200 a second, read ${String(rate)}`);
+    expect(noise >= 15 && noise <= 19, `the Noise tile should read the mock's noise floor in dBmV, read ${String(noise)}`);
+    expect(liveText.includes('Ref locked'), 'the mock locks to the mains: "Ref locked"');
+    expect(liveText.includes('Test data.') && liveText.includes('generated, not measured'), 'the banner says the numbers are generated, not measured');
+    expect(!/^\s*Record\b/m.test(liveText) && (await page.getByRole('button', { name: /Record/ }).count()) === 0, 'there is nothing to record against: no Record button');
+    expect((await page.getByRole('link', { name: 'Tracking mode' }).count()) === 1, 'Tracking mode is offered: it walks free, without a line');
+    expect(liveText.includes('need the survey server'), 'the Live screen says why recording is missing');
+    expect(liveText.includes('Connected') && !liveText.includes('Waiting for data'), 'the link is up and data is flowing');
+    expect(phone.pulseFrames > 10, `pulse frames should have reached the phone, saw ${String(phone.pulseFrames)}`);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'the Live screen must not scroll sideways');
+    expect(
+      phone.calls.filter((c) => c === 'CantolLink.addListener').length >= 2 && phone.listeners.some((l) => l.eventName === 'frame'),
+      'the app listens for frames while the Live screen is open',
+    );
+
+    // The mock pretends to have three sensors: a selector appears, and each sensor has its own figures
+    await until('the sensor selector', async () => (await page.getByRole('group', { name: 'Sensor' }).count()) === 1, 6000);
+    const sensorButtons = await page.getByRole('group', { name: 'Sensor' }).getByRole('button').allInnerTexts();
+    expect(sensorButtons.join('|') === 'All|1|2|3', `the selector should offer All, 1, 2 and 3, offered: ${sensorButtons.join(', ')}`);
+    await page.getByRole('group', { name: 'Sensor' }).getByRole('button', { name: 'Sensor 2' }).click();
+    await until('the Rate tile to show sensor 2 alone', async () => (await tile('Rate')) === 66, 4000);
+    const onePoints = await page.locator('svg.chart circle').count();
+    expect(onePoints > 0 && onePoints < 200, `the plot should still show pulses, but only the one sensor's, saw ${String(onePoints)}`);
+    expect(((await page.locator('svg.chart').first().getAttribute('aria-label')) ?? '').includes('sensor 2'), 'the plot says which sensor it shows');
+    await snap('live-sensor-2');
+    await page.getByRole('group', { name: 'Sensor' }).getByRole('button', { name: 'All' }).click();
+    await until('the Rate tile to show all sensors again', async () => (await tile('Rate')) === 200, 4000);
+
+    // ----- Tracking without a line: a free walk with marks M1, M2, ...
+    await page.evaluate(() => {
+      window.location.hash = '#/track/setup';
+    });
+    await until('the setup route to lead to the free walk', () => hash() === '#/track', 4000);
+    await page.evaluate(() => {
+      window.location.hash = '#/live';
+    });
+    await until('Live', () => hash() === '#/live');
+    await page.getByRole('link', { name: 'Tracking mode' }).click();
+    await until('the free walk', () => hash() === '#/track');
+    await until('the level to appear', async () => /level now[\s\S]*\d+\.\d\s*dBmV/i.test(await body()), 8000);
+    await snap('free-walk');
+    const walkText = await body();
+    expect(/Free walk/.test(walkText) && walkText.includes('0 stations marked'), 'the free walk says it is a free walk with nothing marked yet');
+    expect(walkText.includes('Test data.'), 'the walk shows the test-data banner too');
+    expect(walkText.includes('Strongest of 3 sensors'), 'the walk says it reads the strongest of the three sensors');
+    expect(startsSent() === 1, `moving from Live to the walk must not start the stream again, ${String(startsSent())} Start frames`);
+    const markButton = page.getByRole('button', { name: 'Mark station' });
+    await sleep(5500);
+    expect(!(await markButton.isDisabled()), 'Mark station is enabled once samples are in');
+    await markButton.click();
+    await until('M1', async () => (await body()).includes('M1 ·') && (await body()).includes('1 station marked'), 4000);
+    await sleep(5500);
+    await markButton.click();
+    await until('M2', async () => (await body()).includes('M2 ·') && (await body()).includes('2 stations marked'), 4000);
+    await snap('free-walk-marks');
+    const marked = await body();
+    const rows = await page.locator('section[aria-label="Stations"] .row').allInnerTexts();
+    expect(rows.length === 2 && rows[0].includes('first') && /Rising|Falling|Steady/.test(rows[1]), `two station rows, the second compared with the first: ${rows.join(' | ')}`);
+    expect(/strongest/.test(marked), 'one of the marks is called the strongest');
+    expect(/Level at each station\. M1 [\d.]+ dBmV, M2 [\d.]+ dBmV/.test((await page.locator('svg.chart').getAttribute('aria-label')) ?? ''), 'the chart says what it shows');
+    expect(await page.locator('svg.chart circle').count() >= 2, 'the chart has a point per mark');
+    await page.getByRole('button', { name: '20 dBmV' }).click();
+    expect((await page.getByRole('button', { name: '20 dBmV' }).getAttribute('aria-pressed')) === 'true', 'the warning level can be changed');
+    await until('the warning banner (the mock is far above 20 dBmV)', async () => (await body()).includes('reached the warning level of 20 dBmV'), 8000);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'the free walk must not scroll sideways');
+    expect(startsSent() === 1 && stopsSent() === 0, 'the whole walk used the one stream');
+    // Leaving with marks asks first, and keeps them if told to
+    await page.getByRole('button', { name: 'End walk' }).click();
+    await until('the confirmation', async () => (await body()).includes('are not saved'), 3000);
+    await page.getByRole('button', { name: 'Keep walking' }).click();
+    await sleep(300);
+    expect(hash() === '#/track' && (await body()).includes('M2 ·'), 'Keep walking keeps the marks');
+    await page.getByRole('button', { name: 'End walk' }).click();
+    await page.getByRole('button', { name: 'End walk' }).last().click();
+    await until('Live after ending the walk', () => hash() === '#/live', 4000);
+
+    // Leaving the screen sends Stop, stops the pulses and stops listening
+    await page.getByRole('link', { name: 'Device', exact: true }).click();
+    await until('the Ready screen', () => hash() === '#/device');
+    await until('a Stop frame to reach the Cantol', () => stopsSent() === 1, 5000);
+    await sleep(500);
+    const pulsesAtStop = phone.pulseFrames;
+    await sleep(1000);
+    expect(phone.pulseFrames - pulsesAtStop <= 1, `the pulses should stop after Stop, ${String(phone.pulseFrames - pulsesAtStop)} more arrived in 1 s`);
+    expect(!phone.listeners.some((l) => l.eventName === 'frame'), 'the app stops listening for frames after Stop');
+
+    // A Start that cannot be sent is said, with a way to try again
+    phone.failSend = true;
+    await start.click();
+    await until('the Live screen', () => hash() === '#/live');
+    await until('the message that the Cantol did not start', async () => (await body()).includes('The Cantol did not start sending'), 5000);
+    await snap('live-start-failed');
+    expect((await body()).includes('reconnects by itself'), 'the message says what to do');
+    phone.failSend = false;
+    await page.getByRole('button', { name: 'Try again' }).click({ timeout: 5000 });
+    await until('pulses after trying again', async () => (await body()).includes('Test data.') && !(await body()).includes('did not start'), 8000);
+    expect(startsSent() === 2, `the retry sends one more Start, ${String(startsSent())} in all`);
+
+    // A silent device is not a quiet line: the screen says it is waiting
+    phone.muteFrames = true;
+    await until('the waiting message', async () => (await body()).includes('Waiting for data from the Cantol'), 12000);
+    await snap('live-waiting');
+    phone.muteFrames = false;
+    await until('the message to go once data arrives', async () => !(await body()).includes('Waiting for data'), 8000);
+
+    // The link drops while measuring: it recovers by itself and asks for the stream again
+    const startsBeforeLoss = startsSent();
+    await phone.loseLink();
+    await until('"Reconnecting" on the Live screen', async () => (await body()).includes('Reconnecting'), 6000);
+    await snap('live-link-lost');
+    expect(hash() === '#/live', 'a lost link recovers silently: the Live screen stays');
+    await phone.restoreLink();
+    await until('a new Start after the reconnect', () => startsSent() === startsBeforeLoss + 1, 8000);
+    const pulsesAfterReconnect = phone.pulseFrames;
+    await sleep(1200);
+    expect(phone.pulseFrames > pulsesAfterReconnect + 5, 'pulses flow again after the reconnect');
+    await until('Connected again', async () => !(await body()).includes('Reconnecting'), 10000);
+    await page.getByRole('link', { name: 'Device', exact: true }).click();
+    await until('the Ready screen', () => hash() === '#/device');
+    await until('a second Stop frame', () => stopsSent() === 2, 5000);
 
     // ----- Link lost and restored
     await phone.loseLink();
@@ -516,11 +482,14 @@ async function main() {
     // the first step that was not met when it looked (here usually Cantol, still linking), and the
     // operator taps Continue through the steps that are met by then; that is the specified flow.
     const exchangesBefore = phone.exchanged.length;
+    const scansBefore = phone.scans.length;
     await page.reload();
     let taps = 0;
+    let askedAgain = false;
     await until(
       'the Ready screen after a restart',
       async () => {
+        if (hash() === '#/setup/device') askedAgain = true;
         // The hash still says #/device for a moment after a reload, so look for the screen itself.
         if (hash() === '#/device' && (await visible(page.getByRole('button', { name: 'Start measurement' })))) return true;
         const next = page.getByRole('link', { name: 'Continue' });
@@ -535,8 +504,26 @@ async function main() {
     await until('Connected after a restart', async () => (await body()).includes('Connected'), 15000);
     await snap('ready-after-restart');
     notes.push(`after a restart the operator tapped Continue ${String(taps)} time(s) to reach Ready`);
+    expect(!askedAgain, 'the label values are remembered: a restart must not ask for them again');
     expect(phone.exchanged.length > exchangesBefore, 'a restart should verify Cantol again with a HELLO');
-    expect(phone.scans.length === 1, `the remembered address should be tried first, so no second scan: ${String(phone.scans.length)} scans`);
+    expect(phone.scans.length === scansBefore, `the remembered address should be tried first, so no scan after a restart: ${String(phone.scans.length - scansBefore)} new scans`);
+
+    // ----- Correcting the name later: it applies at once, and the link to the same Cantol is kept
+    const disconnectsBefore = phone.calls.filter((c) => c === 'CantolLink.disconnect').length;
+    await page.evaluate(() => {
+      window.location.hash = '#/setup/hotspot';
+    });
+    await page.getByRole('link', { name: /Change/ }).click();
+    await until('the label screen for an edit', () => hash() === '#/setup/device');
+    await page.getByLabel('Network name (SSID)').fill('CANTOL-5678');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await until('the Ready screen after a name change', () => hash() === '#/device', 10000);
+    const afterEdit = await body();
+    expect(afterEdit.includes('CANTOL-5678') && !afterEdit.includes('Reconnecting'), 'the new name is shown and the link is kept');
+    expect(
+      phone.calls.filter((c) => c === 'CantolLink.disconnect').length === disconnectsBefore,
+      'changing only the name must not drop the link',
+    );
 
     // ----- A small phone with larger text: the Ready screen has a note the demo never showed
     await page.setViewportSize({ width: 360, height: 640 });

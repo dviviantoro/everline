@@ -35,10 +35,11 @@ cd "$root"
 if [ "$demo" = 1 ]; then
   npm run build:demo
 elif [ "$field" = 1 ]; then
-  if [ ! -f config/device-profile.local.json ]; then
-    echo "android-build: config/device-profile.local.json is missing, so the EXAMPLE profile is built in." >&2
-    echo "  The hotspot name and password it shows will not match your Cantol. Copy" >&2
-    echo "  config/device-profile.example.json to config/device-profile.local.json and edit it." >&2
+  # The profile holds only the band and the two ports (the example is right for a stock unit). The
+  # hotspot name, password and MAC address are typed on the phone from the Cantol's label.
+  if [ -f config/device-profile.local.json ] && grep -Eq '"(ssid|password)"' config/device-profile.local.json; then
+    echo "android-build: config/device-profile.local.json has an ssid or password. They are no longer read:" >&2
+    echo "  the operator types them from the Cantol's label on the phone. Remove them from the file." >&2
   fi
   npm run build:field
 else
